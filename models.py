@@ -81,7 +81,6 @@ class Model(object):
         saver.restore(sess, save_path)
         print("Model restored from file: %s" % save_path)
 
-
 class MLP(Model):
     def __init__(self, placeholders, input_dim, **kwargs):
         super(MLP, self).__init__(**kwargs)
@@ -218,6 +217,7 @@ class PEM(Model):
     def _loss(self):
         l = tf.nn.softmax_cross_entropy_with_logits_v2(logits=self.outputs, labels=self.placeholders['labels'],axis=1)
         loss = tf.reduce_mean(l) # modify here
+        tf.summary.scalar("loss", loss)
         self.loss+=loss
 
 

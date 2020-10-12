@@ -200,6 +200,7 @@ class PathEmbedding(Layer):
         self.link_state_dim = link_state_dim
         self.path_update = tf.keras.layers.GRUCell(path_state_dim)
         self.act=act
+        self.w=glorot([num_paths,num_paths])
 
 
 
@@ -227,6 +228,6 @@ class PathEmbedding(Layer):
         self.outs=outputs # monitor
 
         path_state=tf.reshape(path_state,[self.num_quests,self.num_paths])
+        outs=tf.matmul(path_state,self.w)
 
-
-        return path_state
+        return self.act(outs)

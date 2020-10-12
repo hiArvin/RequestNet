@@ -129,4 +129,4 @@ def gen_label(graph, flow, capacity, num_paths, num_quests=1,print_info=False):
     # transform label
     # for i in range(num_paths):
     #     l.append([label[0][i]])
-    return paths, idx_list, seqs, label, occupy, normalization(flow_size)
+    return paths, idx_list, seqs, label, occupy, (flow_size)/max(capacity)

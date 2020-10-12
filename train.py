@@ -45,10 +45,12 @@ placeholders = {
 }
 
 # Create model
-model = PEM(num_paths=3,num_quests=num_quests,placeholders=placeholders,learning_rate=0.01, input_dim=2, logging=True)
+model = PEM(num_paths=num_paths,num_quests=num_quests,placeholders=placeholders,learning_rate=0.01, input_dim=2, logging=True)
 
 # Initialize session
 sess = tf.Session()
+merged = tf.summary.merge_all()
+summary_writer = tf.summary.FileWriter('./logs/', graph=sess.graph)
 
 #
 # # Define model evaluation function
@@ -61,26 +63,17 @@ def evaluate(features, support, labels,paths,idx,seqs, placeholders,flow_size):
 #
 # Init variables
 sess.run(tf.global_variables_initializer())
-#
-cost_val = []
-#
-f=open('log/train_loss.txt', 'w')
-loss=[]
 
-# # Train model
+# Train model
 epochs=100
 for epoch in range(epochs):
     flow=[]
     for i in range(num_quests):
         flow.append(next(flow_generator))
     paths,idx,seqs,labels,occupy,flow_size = gen_label(topo.graph, flow, feature[1, :], num_paths=num_paths,num_quests=num_quests)
-    # labels=np.zeros([num_quests,num_paths])
-    # labels[:,0]=1
-    # flow_size=np.reshape(flow_size,[num_paths*num_quests,1])
 
     feature[1,:]=update_capacity(feature[1,:],occupy)
-    # print(paths,idx,seqs,labels,occupy)
-    # print(paths,idx,seqs,labels)
+
     t = time.time()
     # Construct feed dictionary
     # f=np.zeros_like(feature,dtype=np.float)
@@ -94,7 +87,10 @@ for epoch in range(epochs):
 
     # Validation
     cost, acc, duration = evaluate(feature.T, support, labels, paths,idx,seqs, placeholders,flow_size)
-    cost_val.append(cost)
+
+    # summary
+    summary = sess.run(merged, feed_dict=feed_dict)
+    summary_writer.add_summary(summary, epoch)
 
     if epoch % 20 ==0:
         feature=reset_features(graph)
@@ -102,9 +98,7 @@ for epoch in range(epochs):
     print("Epoch:", '%04d' % (epoch + 1), "train_loss=", "{:.5f}".format(outs[1]),
           "train_acc=", "{:.5f}".format(outs[2]), "val_loss=", "{:.5f}".format(cost),
           "val_acc=", "{:.5f}".format(acc), "time=", "{:.5f}".format(time.time() - t))
-    loss.append(outs[1])
 
-f.write(str(loss))
 print("Optimization Finished!")
 #
 # # Testing
