@@ -9,94 +9,12 @@ import pandas as pd
 import networkx as nx
 import numpy as np
 import pickle
-
-
-def parse_index_file(filename):
-    """Parse index file."""
-    index = []
-    for line in open(filename):
-        index.append(int(line.strip()))
-    return index
-
-
-def sample_mask(idx, l):
-    """Create mask."""
-    mask = np.zeros(l)
-    mask[idx] = 1
-    return np.array(mask, dtype=np.bool)
-
-
-def load_data(dataset_str):
-    """
-    Loads input data from gcn/data directory
-
-    ind.dataset_str.x => the feature vectors of the training instances as scipy.sparse.csr.csr_matrix object;
-    ind.dataset_str.tx => the feature vectors of the test instances as scipy.sparse.csr.csr_matrix object;
-    ind.dataset_str.allx => the feature vectors of both labeled and unlabeled training instances
-        (a superset of ind.dataset_str.x) as scipy.sparse.csr.csr_matrix object;
-    ind.dataset_str.y => the one-hot labels of the labeled training instances as numpy.ndarray object;
-    ind.dataset_str.ty => the one-hot labels of the test instances as numpy.ndarray object;
-    ind.dataset_str.ally => the labels for instances in ind.dataset_str.allx as numpy.ndarray object;
-    ind.dataset_str.graph => a dict in the format {index: [index_of_neighbor_nodes]} as collections.defaultdict
-        object;
-    ind.dataset_str.test.index => the indices of test instances in graph, for the inductive setting as list object.
-
-    All objects above must be saved using python pickle module.
-
-    :param dataset_str: Dataset name
-    :return: All data input files loaded (as well the training/test data).
-    """
-    names = ['x', 'y', 'tx', 'ty', 'allx', 'ally', 'graph']
-    objects = []
-    for i in range(len(names)):
-        with open("data/ind.{}.{}".format(dataset_str, names[i]), 'rb') as f:
-            if sys.version_info > (3, 0):
-                objects.append(pkl.load(f, encoding='latin1'))
-            else:
-                objects.append(pkl.load(f))
-
-    x, y, tx, ty, allx, ally, graph = tuple(objects)
-    test_idx_reorder = parse_index_file("data/ind.{}.test.index".format(dataset_str))
-    test_idx_range = np.sort(test_idx_reorder)
-
-    if dataset_str == 'citeseer':
-        # Fix citeseer dataset (there are some isolated nodes in the graph)
-        # Find isolated nodes, add them as zero-vecs into the right position
-        test_idx_range_full = range(min(test_idx_reorder), max(test_idx_reorder)+1)
-        tx_extended = sp.lil_matrix((len(test_idx_range_full), x.shape[1]))
-        tx_extended[test_idx_range-min(test_idx_range), :] = tx
-        tx = tx_extended
-        ty_extended = np.zeros((len(test_idx_range_full), y.shape[1]))
-        ty_extended[test_idx_range-min(test_idx_range), :] = ty
-        ty = ty_extended
-
-    features = sp.vstack((allx, tx)).tolil()
-    features[test_idx_reorder, :] = features[test_idx_range, :]
-    adj = nx.adjacency_matrix(nx.from_dict_of_lists(graph))
-
-    labels = np.vstack((ally, ty))
-    labels[test_idx_reorder, :] = labels[test_idx_range, :]
-
-    idx_test = test_idx_range.tolist()
-    idx_train = range(len(y))
-    idx_val = range(len(y), len(y)+500)
-
-    train_mask = sample_mask(idx_train, labels.shape[0])
-    val_mask = sample_mask(idx_val, labels.shape[0])
-    test_mask = sample_mask(idx_test, labels.shape[0])
-
-    y_train = np.zeros(labels.shape)
-    y_val = np.zeros(labels.shape)
-    y_test = np.zeros(labels.shape)
-    y_train[train_mask, :] = labels[train_mask, :]
-    y_val[val_mask, :] = labels[val_mask, :]
-    y_test[test_mask, :] = labels[test_mask, :]
-
-    return adj, features, y_train, y_val, y_test, train_mask, val_mask, test_mask
+from topology import Topology
 
 
 def sparse_to_tuple(sparse_mx):
     """Convert sparse matrix to tuple representation."""
+
     def to_tuple(mx):
         if not sp.isspmatrix_coo(mx):
             mx = mx.tocoo()
@@ -140,7 +58,7 @@ def preprocess_adj(adj):
     return sparse_to_tuple(adj_normalized)
 
 
-def construct_feed_dict(features, support, labels,paths,index,sequences, placeholders,flow_size):
+def construct_feed_dict(features, support, labels, paths, index, sequences, placeholders):
     """Construct feed dictionary."""
     feed_dict = dict()
     feed_dict.update({placeholders['labels']: labels})
@@ -149,7 +67,6 @@ def construct_feed_dict(features, support, labels,paths,index,sequences, placeho
     feed_dict.update({placeholders['paths']: paths})
     feed_dict.update({placeholders['index']: index})
     feed_dict.update({placeholders['sequences']: sequences})
-    feed_dict.update({placeholders['flow_size']: flow_size})
     return feed_dict
 
 
@@ -170,7 +87,7 @@ def chebyshev_polynomials(adj, k):
         s_lap = sp.csr_matrix(scaled_lap, copy=True)
         return 2 * s_lap.dot(t_k_minus_one) - t_k_minus_two
 
-    for i in range(2, k+1):
+    for i in range(2, k + 1):
         t_k.append(chebyshev_recurrence(t_k[-1], t_k[-2], scaled_laplacian))
 
     return sparse_to_tuple(t_k)
@@ -213,9 +130,10 @@ def k_shortest_paths(graph, source, target, k):
     for i in all_path:
         count += 1
         paths.append(i)
-        if count % 3 == 0:
+        if count % k == 0:
             break
     return paths
+
 
 def save_obj(obj, name):
     with open(name + '.pkl', 'wb') as f:
@@ -226,11 +144,146 @@ def load_obj(name):
     with open(name + '.pkl', 'rb') as f:
         return pickle.load(f)
 
-def update_capacity(capacity,occupy):
+
+def update_capacity(capacity, occupy):
     f = np.sum(occupy, axis=1)
     capacity = capacity - f
-    return capacity
+    flag = True
+    for i in capacity:
+        if i < 0:
+            flag = False
+    return capacity, flag
 
 
 def normalization(data):
-    return data/np.linalg.norm(data)
+    return data / np.linalg.norm(data)
+
+
+def normalize_features(feature, input_dim, max_cap=None):
+    dim, length = feature.shape
+    f = np.zeros([input_dim, length])
+    for d in range(dim):
+        f[d, :] = normalization(feature[d, :])
+    return f
+
+
+def random_capacity(a, b, num_edges):
+    cap = np.random.randint(a * 10, b * 10, num_edges)
+    return cap * 10
+
+
+def nodeGraph_to_edgeGraph(graph, support=False):
+    num_edges = graph.number_of_edges()
+    edges_attr = {}
+    idx = 0
+    tran_dict = {'core layer': 1, 'converge layer': 2, 'access layer': 3, 'metro cross': 4}
+    for u, v in graph.edges:
+        attr = graph.get_edge_data(u, v)
+        edges_attr[idx] = {'u': u, 'v': v, 'layer': tran_dict[attr['layer']], 'bandwidth': attr['bandwidth']}
+        idx += 1
+    edges_df = pd.DataFrame.from_dict(edges_attr)
+
+    adj = np.zeros([num_edges, num_edges], dtype=np.int)
+    for i in range(num_edges - 1):
+        for j in range(i + 1, num_edges):
+            if edges_attr[i]['u'] == edges_attr[i]['u'] \
+                    or edges_attr[i]['v'] == edges_attr[i]['v'] \
+                    or edges_attr[i]['u'] == edges_attr[i]['v'] \
+                    or edges_attr[i]['v'] == edges_attr[i]['u']:
+                adj[i, j] = 1
+                adj[j, i] = 1
+    sup = adj
+    if support:
+        edge_graph = nx.from_numpy_matrix(adj)
+        sup = nx.normalized_laplacian_matrix(edge_graph).todense()
+    f = edges_df.loc[['layer', 'bandwidth']]
+    f = f.to_numpy()
+
+    return sup, f[0, :], f[1, :]
+
+
+def random_graph_input(num_nodes, p=0.3, support=True):
+    graph = nx.erdos_renyi_graph(n=num_nodes, p=p)
+    if not nx.is_connected(graph):
+        c = list(nx.connected_components(graph))
+        for j in range(len(c) - 1):
+            graph.add_edge(list(c[j])[0], list(c[j + 1])[0])
+    num_edges = graph.number_of_edges()
+    edges_attr = {}
+    idx = 0
+    for u, v in graph.edges:
+        edges_attr[idx] = {'u': u, 'v': v}
+        idx += 1
+    adj = np.zeros([num_edges, num_edges], dtype=np.int)
+    for i in range(num_edges - 1):
+        for j in range(i + 1, num_edges):
+            if edges_attr[i]['u'] == edges_attr[i]['u'] \
+                    or edges_attr[i]['v'] == edges_attr[i]['v'] \
+                    or edges_attr[i]['u'] == edges_attr[i]['v'] \
+                    or edges_attr[i]['v'] == edges_attr[i]['u']:
+                adj[i, j] = 1
+                adj[j, i] = 1
+    edge_graph = nx.from_numpy_matrix(adj)
+    sup = nx.normalized_laplacian_matrix(edge_graph).todense()
+    bandwidth = np.ones([num_edges], dtype=np.float) * 1000
+
+    return edge_graph, sup, bandwidth
+
+
+def gen_flows(graph, size_percent: float(0 - 1.0) = 0.1, bandwidth=1000):
+    source_nodes = list(graph.nodes)
+    dest_nodes = list(graph.nodes)
+    while True:
+        s = int(np.random.choice(source_nodes, 1))
+        d = int(np.random.choice(dest_nodes, 1))
+        if s != d:
+            yield [s, d, int(np.random.uniform(0.0e1 * bandwidth, size_percent * bandwidth))]
+
+
+def gen_flows_zte(topo, num_flows, percent=0.05):
+    flows = []
+    flow_gen = topo.gen_flows(percent)
+    for i in range(num_flows):
+        flows.append(next(flow_gen))
+    return flows
+
+
+def cal_path_delay(path, now_cap, init_cap):
+    delay = 0
+    load = init_cap - now_cap
+    for v in path:
+        l = load[v]
+        c = init_cap[v]
+        d = 0
+        if l / c <= 1 / 3:
+            d = l
+        elif 1 / 3 < l / c <= 2 / 3:
+            d = 3 * l - 2 / 3 * c
+        elif 2 / 3 < l / c <= 9 / 10:
+            d = 10 * l - 16 / 3 * c
+        else:
+            d = 70 * l - 178 / 3 * c
+        delay = max(delay, d)
+    return delay
+
+
+def cal_total_delay(traffic, init_bd):
+    edges = len(init_bd)
+    sum_delay = 0
+    for e in range(edges):
+        l = traffic[e]
+        c = init_bd[e]
+        if l / c <= 1 / 3:
+            d = l
+        elif 1 / 3 < l / c <= 2 / 3:
+            d = 3 * l - 2 / 3 * c
+        elif 2 / 3 < l / c <= 9 / 10:
+            d = 10 * l - 16 / 3 * c
+        elif 9 / 10 < l / c <= 1:
+            d = 70 * l - 178 / 3 * c
+        elif 1 < l / c < 11 / 10:
+            d = 500 * l - 1468 / 3 * c
+        else:
+            d = 5000 * l - 16318 / 3 * c
+        sum_delay += d
+    return sum_delay

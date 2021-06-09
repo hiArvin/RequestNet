@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="holan@223.3.94.25:22 password" remoteFilesAllowedToDisappearOnAutoupload="false">
+  <component name="PublishConfigData" autoUpload="Always" serverName="holan@a534.ink19.cn:22 password" remoteFilesAllowedToDisappearOnAutoupload="false">
     <serverData>
-      <paths name="holan@223.3.94.25:22 password">
+      <paths name="holan@a534.ink19.cn:22 password">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/holan/Romote" local="$PROJECT_DIR$" />
+            <mapping deploy="/home/holan/RequestNet" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>

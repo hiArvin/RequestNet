@@ -6,15 +6,18 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np
 
-d = np.load('logs/Q10/P7-R6/delay.npy')
+d = np.load('logs/0608-1920-Q20-P8-R5/delay.npy')
 print(d)
 plt.figure()
 # ax1 = plt.subplot(121)
 plt.title('Delay')
-x_axis = list(range(20))
+x_axis = list(range(d.shape[1]))
 # plt.plot(x_axis, d[0,:], color='red', label='Predictor delay')
 # plt.plot(x_axis, d[1,:], color='green', label='SP selection delay')
-plt.plot(x_axis, d[0,:]/d[1,:], color='red', label='Predictor/SP Ratio')
+plt.plot(x_axis, d[0,:]/d[2,:], color='red', label='Predictor/OPT Ratio')
+plt.plot(x_axis, d[1,:]/d[2,:], color='green', label='SP/OPT Ratio')
+
+plt.ylim((0.9,1.5))
 # plt.plot(x_axis, d[1,:], color='green', label='SP selection Delay')
 
 plt.legend() # 显示图例

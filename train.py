@@ -5,104 +5,146 @@ import time
 import random
 import tensorflow as tf
 from models import *
-
+from utils import *
 
 from topology import Topology
 import networkx as nx
-import pandas as pd
-from e_graph import *
-from labelling import *
+from label import gen_label
+from datetime import datetime
 
-topo = Topology(num_core=1)
+# tf config
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+
+topo = Topology(num_core=1, num_converge=1, num_access=1)
 graph = topo.graph
-# graph=nx.connected_caveman_graph(l=3,k=3)
 
-num_edges = nx.number_of_edges(graph)
-num_nodes = nx.number_of_nodes(graph)
-num_paths = 3
-num_quests = 5
+NUM_EDGES = nx.number_of_edges(graph)
+NUM_NODES = nx.number_of_nodes(graph)
+NUM_PATHS = 5  # at least 4
+NUM_QUESTS = 30
+refresh = 5
+LR = 0.005  # 0.005 is the best until now
+Min_Cap = 20  # *100
+Max_Cap = 50  # *100
+EPOCHS = 300
+SAVE = True
 
-def reset_features(graph):
-    _,feature=nodeGraph_to_edgeGraph(graph)
-    return feature
+support, layer, bd = nodeGraph_to_edgeGraph(graph, support=True)
 
-support, feature = nodeGraph_to_edgeGraph(graph,support=True)
-
-flow_generator = topo.gen_flows()
-
+flow_generator = topo.gen_flows(size_percent=0.05)
 
 
 # Define placeholders
 placeholders = {
-    'support': tf.placeholder(tf.float32,shape=(num_edges,num_edges)),
+    'support': tf.placeholder(tf.float32, shape=(NUM_EDGES, NUM_EDGES)),
+    # 'support': tf.placeholder(tf.float32),
     'features': tf.placeholder(tf.float32),
-    'labels': tf.placeholder(tf.int64,shape=(num_quests,num_paths)),
-    'dropout': tf.placeholder_with_default(0.,shape=()),
-    'paths':tf.placeholder(tf.int64),
-    'index':tf.placeholder(tf.int64),
-    'sequences':tf.placeholder(tf.int64),
-    'flow_size':tf.placeholder(tf.float32,shape=(num_quests,num_paths))
+    'labels': tf.placeholder(tf.int64, shape=(NUM_QUESTS, NUM_PATHS)),
+    'dropout': tf.placeholder_with_default(0., shape=()),
+    'paths': tf.placeholder(tf.int64),
+    'index': tf.placeholder(tf.int64),
+    'sequences': tf.placeholder(tf.int64)
 }
 
 # Create model
-model = PEM(num_paths=num_paths,num_quests=num_quests,placeholders=placeholders,learning_rate=0.01, input_dim=2, logging=True)
+model = PEM(num_paths=NUM_PATHS, num_edges=NUM_EDGES, num_quests=NUM_QUESTS, placeholders=placeholders,
+            learning_rate=LR, gcn_input_dim=2+ NUM_PATHS * NUM_QUESTS,
+            gcn_hidden_dim=16, gcn_output_dim=8, pe_output_dim=4,att_layers_num=3)
 
 # Initialize session
-sess = tf.Session()
-merged = tf.summary.merge_all()
-summary_writer = tf.summary.FileWriter('./logs/', graph=sess.graph)
+sess = tf.Session(config=config)
+if SAVE:
+    merged = tf.summary.merge_all()
+    save_path = './logs/' + datetime.now().strftime('%m%d-%H%M')
+    save_path+='-Q'+str(NUM_QUESTS)+'-P'+str(NUM_PATHS)+'-R'+str(refresh)
+    summary_writer = tf.summary.FileWriter(save_path, graph=sess.graph)
 
-#
-# # Define model evaluation function
-def evaluate(features, support, labels,paths,idx,seqs, placeholders,flow_size):
-    t_test = time.time()
-    feed_dict_val = construct_feed_dict(features, support, labels,paths,idx,seqs, placeholders,flow_size)
-    outs_val = sess.run([model.loss, model.accuracy], feed_dict=feed_dict_val)
-    return outs_val[0], outs_val[1], (time.time() - t_test)
-#
-#
+
+def update(choose, sp, traffic, init_bd):
+    # c = np.argmax(choose, axis=1)
+    # print('predictor:',c)
+    success = np.ones([NUM_QUESTS], dtype=np.int16)
+    for q in range(NUM_QUESTS):
+        p = q * NUM_PATHS + choose[q]
+        tmp = init_bd - traffic
+        tmp = np.where(tmp <= 0, 1, tmp)
+        if np.any(tmp - sp[p, :] < 0):
+            success[q] = 0
+        traffic = traffic + sp[p, :]
+    return traffic, np.nansum(success)
+
+
+def gen_feed_dict():
+    bandwidth = np.random.randint(Min_Cap,Max_Cap,size=NUM_EDGES)*100
+    traffic = np.random.randint(Min_Cap//5 * 100, Min_Cap//3 * 100, size=NUM_EDGES)
+    flow = []
+    for i in range(NUM_QUESTS):
+        flow.append(next(flow_generator))
+    paths, idx, seqs, labels, sp, shortest_path = gen_label(topo.graph, flow, traffic, bandwidth, target='delay',
+                                                            num_paths=NUM_PATHS,
+                                                            num_quests=NUM_QUESTS)
+    # normalize
+    ff = np.concatenate([[layer / np.max(layer)], [traffic / bandwidth]], axis=0)
+    # process sp feature
+    fp1 = sp / np.tile(bandwidth, [NUM_QUESTS * NUM_PATHS, 1])
+    rest_cap = bandwidth - traffic
+    s_fp = np.where(rest_cap <= 0, -100, rest_cap)
+    fp2 = sp / np.tile(s_fp, [NUM_QUESTS * NUM_PATHS, 1])
+    # repeat feature of flow
+    f = np.concatenate([ff,fp1])
+    # Construct feed dictionary
+    feed_dict = construct_feed_dict(f.T, support, labels, paths, idx, seqs, placeholders)
+    feed_dict.update({placeholders['dropout']: 0.})
+    # feature[1, :],flag = update_capacity(feature[1, :], occupy)
+    return feed_dict, labels, sp
+
+
 # Init variables
 sess.run(tf.global_variables_initializer())
 
 # Train model
-epochs=100
-for epoch in range(epochs):
-    flow=[]
-    for i in range(num_quests):
-        flow.append(next(flow_generator))
-    paths,idx,seqs,labels,occupy,flow_size = gen_label(topo.graph, flow, feature[1, :], num_paths=num_paths,num_quests=num_quests)
-
-    feature[1,:]=update_capacity(feature[1,:],occupy)
-
-    t = time.time()
-    # Construct feed dictionary
-    # f=np.zeros_like(feature,dtype=np.float)
-    # f[0,:]=feature[0,:]/4
-    # f[1,:]=feature[1,:]/100
-    feed_dict = construct_feed_dict(feature.T, support, labels, paths,idx,seqs, placeholders,flow_size)
-    feed_dict.update({placeholders['dropout']: 0.})
-
+acc_num = 0
+early_stop=0
+for epoch in range(EPOCHS):
+    feed_dict, labels, sp = gen_feed_dict()
+    lb = np.nanargmax(labels, axis=1)
+    print("Labels   :\t", lb)
+    # update
+    # if lb.max() == lb.min():
+    #     continue
+    # if (epoch+1) % refresh == 0:
+    #     print('Bandwidth Reset!')
+    #     traffic = np.zeros_like(bandwidth)
+    # else:
+    #     traffic, _ = update(lb, sp, traffic,bandwidth)
     # Training step
-    outs = sess.run([model.outputs, model.loss, model.accuracy], feed_dict=feed_dict)
+    outs = sess.run([model.outputs, model.loss, model.accuracy, model.opt_op], feed_dict=feed_dict)
+    # Print results
+    print('Predictor:\t', np.nanargmax(softmax(outs[0]), axis=1))
+    # print("Outputs(line1):", outs[0][0])
+    print("Epoch:", '%04d' % (epoch + 1), "train_loss=", "{:.5f}".format(outs[1]),
+          "train_acc=", "{:.5f}".format(outs[2]))
 
-    # Validation
-    cost, acc, duration = evaluate(feature.T, support, labels, paths,idx,seqs, placeholders,flow_size)
+    if SAVE:
+        summary = sess.run(merged, feed_dict=feed_dict)
+        summary_writer.add_summary(summary, epoch)
+
+    # early-stop conditions
+    # if outs[2]>=0.95:
+    #     early_stop+=1
+    #     if early_stop>5:
+    #         break
+    # else:
+    #     early_stop=0
 
     # summary
-    summary = sess.run(merged, feed_dict=feed_dict)
-    summary_writer.add_summary(summary, epoch)
 
-    if epoch % 20 ==0:
-        feature=reset_features(graph)
-    # Print results
-    print("Epoch:", '%04d' % (epoch + 1), "train_loss=", "{:.5f}".format(outs[1]),
-          "train_acc=", "{:.5f}".format(outs[2]), "val_loss=", "{:.5f}".format(cost),
-          "val_acc=", "{:.5f}".format(acc), "time=", "{:.5f}".format(time.time() - t))
+    # if epoch >= TEST_START:
+    #     acc_num += np.sum(np.equal(np.argmax(outs[0],axis=1), np.argmax(labels, axis=1)))
+    #     print('Accumulated accuracy:', acc_num)
 
+if SAVE:
+    model.save(sess, save_path)
 print("Optimization Finished!")
-#
-# # Testing
-# paths,idx,seqs,labels,occupy = gen_label(topo.graph, [next(flow_generator)], feature[1, :], num_paths=num_paths)
-# test_cost, test_acc, test_duration = evaluate(feature.T, adj, labels, paths,idx,seqs, placeholders)
-# print("Test set results:", "cost=", "{:.5f}".format(test_cost),
-#       "accuracy=", "{:.5f}".format(test_acc), "time=", "{:.5f}".format(test_duration))
+# print('Test accuracy:',acc_num/((EPOCHS-TEST_START)*NUM_QUESTS))

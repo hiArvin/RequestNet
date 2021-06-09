@@ -102,7 +102,7 @@ class Topology:
             s = int(np.random.choice(source_nodes, 1))
             d = int(np.random.choice(dest_nodes, 1))
             if self._helper_vail_s_d(s, d):
-                yield [s, d, int(np.random.uniform(0.01 * self.access_band, size_percent * self.access_band))]
+                yield [s, d, int(np.random.uniform(0.0e1 * self.access_band, size_percent * self.access_band))]
 
     def _helper_vail_s_d(self, s, d):
         s = self.graph.nodes[s]
