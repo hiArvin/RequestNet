@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project version="4">
-  <component name="ProjectModuleManager">
-    <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/RequestNet.iml" filepath="$PROJECT_DIR$/.idea/RequestNet.iml" />
-      <module fileurl="file://$PROJECT_DIR$/../RequestNet_rand_graph/.idea/RequestNet_rand_graph.iml" filepath="$PROJECT_DIR$/../RequestNet_rand_graph/.idea/RequestNet_rand_graph.iml" />
-    </modules>
-  </component>
-</project>
