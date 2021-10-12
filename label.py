@@ -6,7 +6,7 @@ import time
 import random
 from iteration_utilities import deepflatten
 
-from utils import normalization, k_shortest_paths,cal_total_delay
+from utils import k_shortest_paths
 
 
 def solve_slice(num_edges, num_quests, num_paths, sp, capacity):
@@ -135,7 +135,7 @@ def delay_solver(num_edges, num_quests, num_paths, sp, opy, capacity):
             for e in range(num_edges):
                 var = model.getVarByName(f"delay[{e}]")
                 delay[e] = var.X
-            return res_selct
+            return res_selct, delay
 
 
 
@@ -180,7 +180,7 @@ def gen_label(graph, flow, ocupy, init_bd, num_paths, target, num_quests=1):
         capacity = np.where(capacity <= 0, 1, capacity)
         res_selct, sel_flow = solve_slice(num_edges, num_quests, num_paths, sp, capacity)
     elif target == 'delay':
-        res_selct = delay_solver(num_edges, num_quests, num_paths, sp, ocupy, init_bd)
+        res_selct,delay = delay_solver(num_edges, num_quests, num_paths, sp, ocupy, init_bd)
     else:
         res_selct = np.zeros([num_quests, num_paths], dtype=np.int64)
     # convert to label
@@ -200,7 +200,7 @@ def gen_label(graph, flow, ocupy, init_bd, num_paths, target, num_quests=1):
 
 def gen_paths(graph, flow, num_paths, num_quests=1):
     num_edges = nx.number_of_edges(graph)
-    edges = pd.DataFrame(graph.edges, columns=['src', 'dst'])
+    edges = pd.DataFrame(nx.edges(graph,nbunch=None), columns=['src', 'dst'])
 
     shortest_path = []
     for q in range(num_quests):
@@ -239,7 +239,7 @@ def gen_paths(graph, flow, num_paths, num_quests=1):
 
 def solver(graph, shortest_path, flow, occupy, capacity, num_paths, num_quests=1, print_info=False):
     num_edges = nx.number_of_edges(graph)
-    edges = pd.DataFrame(graph.edges, columns=['src', 'dst'])
+    edges = pd.DataFrame(nx.edges(graph,nbunch=None), columns=['src', 'dst'])
     sp = np.zeros([num_quests, num_paths, num_edges], dtype=np.int16)
     for q in range(num_quests):
         for p in range(num_paths):
@@ -253,7 +253,7 @@ def solver(graph, shortest_path, flow, occupy, capacity, num_paths, num_quests=1
     # # exclude 0 as fraction
     # capacity = np.where(capacity <= 0, 1, capacity)
     t = time.time()
-    label = delay_solver(num_edges, num_quests, num_paths, sp, occupy, capacity)
+    label,delay = delay_solver(num_edges, num_quests, num_paths, sp, occupy, capacity)
     t_ = time.time()
     c = np.nanargmax(label, axis=1)
 
@@ -268,4 +268,4 @@ def solver(graph, shortest_path, flow, occupy, capacity, num_paths, num_quests=1
         if np.any(tmp < 0):
             success -= 1
         occupy = occupy + sp[q, c[q], :]
-    return c, occupy, success, t_ - t
+    return c, occupy, success,delay, t_ - t

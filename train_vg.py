@@ -19,15 +19,16 @@ config.gpu_options.allow_growth = True
 topo = Topology(num_core=1, num_converge=1, num_access=1)
 graph = topo.graph
 
-n_edges = nx.number_of_edges(graph)
-n_nodes = nx.number_of_nodes(graph)
-n_paths = 5  # at least 4
-n_flows = 20
+NUM_EDGES = nx.number_of_edges(graph)
+NUM_NODES = nx.number_of_nodes(graph)
+NUM_PATHS = 5  # at least 4
+NUM_QUESTS = 20
 refresh = 5
 LR = 0.005  # 0.005 is the best until now
 Min_Cap = 20  # *100
 Max_Cap = 50  # *100
 EPOCHS = 300
+Fix_Graph = True
 SAVE = True
 
 support, layer, bd = nodeGraph_to_edgeGraph(graph, support=True)

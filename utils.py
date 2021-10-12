@@ -1,15 +1,11 @@
 import numpy as np
-import pickle as pkl
 import networkx as nx
 import scipy.sparse as sp
-from scipy.sparse.linalg.eigen.arpack import eigsh
-import sys
 import tensorflow as tf
 import pandas as pd
 import networkx as nx
 import numpy as np
-import pickle
-from topology import Topology
+
 
 
 def sparse_to_tuple(sparse_mx):
@@ -70,28 +66,6 @@ def construct_feed_dict(features, support, labels, paths, index, sequences, plac
     return feed_dict
 
 
-def chebyshev_polynomials(adj, k):
-    """Calculate Chebyshev polynomials up to order k. Return a list of sparse matrices (tuple representation)."""
-    print("Calculating Chebyshev polynomials up to order {}...".format(k))
-
-    adj_normalized = normalize_adj(adj)
-    laplacian = sp.eye(adj.shape[0]) - adj_normalized
-    largest_eigval, _ = eigsh(laplacian, 1, which='LM')
-    scaled_laplacian = (2. / largest_eigval[0]) * laplacian - sp.eye(adj.shape[0])
-
-    t_k = list()
-    t_k.append(sp.eye(adj.shape[0]))
-    t_k.append(scaled_laplacian)
-
-    def chebyshev_recurrence(t_k_minus_one, t_k_minus_two, scaled_lap):
-        s_lap = sp.csr_matrix(scaled_lap, copy=True)
-        return 2 * s_lap.dot(t_k_minus_one) - t_k_minus_two
-
-    for i in range(2, k + 1):
-        t_k.append(chebyshev_recurrence(t_k[-1], t_k[-2], scaled_laplacian))
-
-    return sparse_to_tuple(t_k)
-
 
 def glorot(shape, name=None):
     """Glorot & Bengio (AISTATS 2010) init."""
@@ -133,43 +107,6 @@ def k_shortest_paths(graph, source, target, k):
         if count % k == 0:
             break
     return paths
-
-
-def save_obj(obj, name):
-    with open(name + '.pkl', 'wb') as f:
-        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
-
-
-def load_obj(name):
-    with open(name + '.pkl', 'rb') as f:
-        return pickle.load(f)
-
-
-def update_capacity(capacity, occupy):
-    f = np.sum(occupy, axis=1)
-    capacity = capacity - f
-    flag = True
-    for i in capacity:
-        if i < 0:
-            flag = False
-    return capacity, flag
-
-
-def normalization(data):
-    return data / np.linalg.norm(data)
-
-
-def normalize_features(feature, input_dim, max_cap=None):
-    dim, length = feature.shape
-    f = np.zeros([input_dim, length])
-    for d in range(dim):
-        f[d, :] = normalization(feature[d, :])
-    return f
-
-
-def random_capacity(a, b, num_edges):
-    cap = np.random.randint(a * 10, b * 10, num_edges)
-    return cap * 10
 
 
 def nodeGraph_to_edgeGraph(graph, support=False):
