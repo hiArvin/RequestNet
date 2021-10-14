@@ -27,6 +27,7 @@ Min_Cap = 10  # *100
 Max_Cap = 16  # *100
 EPOCHS = 10
 
+eGraph, Attr = nodeGraph_2_edgeGraph(graph)
 support, f_layer, f_bandwidth = nodeGraph_to_edgeGraph(graph, support=True)
 flow_generator = topo.gen_flows(size_percent=0.05)
 

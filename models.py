@@ -130,7 +130,7 @@ class GCN(Model):
 
 
 class PEM(Model):
-    def __init__(self, num_paths, num_quests, num_edges,  placeholders,learning_rate=0.005,
+    def __init__(self, num_paths, num_quests, num_edges, placeholders, learning_rate=0.005,
                  gcn_input_dim=2, gcn_hidden_dim=16, gcn_output_dim=8,
                  pe_output_dim=4, att_layers_num=4,
                  **kwargs):
@@ -143,7 +143,7 @@ class PEM(Model):
         self.gcn_hidden_dim = gcn_hidden_dim
         self.gcn_output_dim = gcn_output_dim
         self.pe_output_dim = pe_output_dim
-        self.att_layers_num= att_layers_num
+        self.att_layers_num = att_layers_num
 
         self.num_paths = num_paths
         self.num_quests = num_quests
@@ -178,7 +178,6 @@ class PEM(Model):
         #                                     dropout=True,
         #                                     logging=self.logging))
 
-
         self.layers.append(PathEmbedding(num_paths=self.num_paths,
                                          num_quests=self.num_quests,
                                          num_edges=self.num_edges,
@@ -187,12 +186,12 @@ class PEM(Model):
                                          placeholders=self.placeholders,
                                          act=tf.nn.relu))
 
-
         # self.layers.append(Attention(num_paths=self.pe_output_dim*self.num_paths,
         #                              num_quests=self.num_quests))
         for l in range(self.att_layers_num):
-            self.layers.append(MultiHeadAttention(d_model=self.pe_output_dim*self.num_paths,num_heads=self.num_paths))
-            self.layers.append(tf.keras.layers.Dense(self.pe_output_dim*self.num_paths))
+            self.layers.append(
+                MultiHeadAttention(d_model=self.pe_output_dim * self.num_paths, num_heads=self.num_paths))
+            self.layers.append(tf.keras.layers.Dense(self.pe_output_dim * self.num_paths))
 
         self.layers.append(tf.keras.layers.Dense(self.num_paths))
         # self.layers.append(Readout(input_dim=self.pe_output_dim*self.num_paths,
@@ -212,7 +211,7 @@ class PEM(Model):
         accuracy_all = tf.cast(correct_prediction, tf.float32)
         accuracy = tf.reduce_mean(accuracy_all)
         tf.summary.scalar('accuracy', accuracy)
-        self.accuracy=accuracy
+        self.accuracy = accuracy
 
     def predict(self):
         return tf.nn.softmax(self.outputs)
@@ -231,4 +230,3 @@ class PEM(Model):
         save_path = path + "/model/%s.ckpt" % self.name
         saver.restore(sess, save_path)
         print("Model restored from file: %s" % save_path)
-

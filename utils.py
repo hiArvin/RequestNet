@@ -109,6 +109,19 @@ def k_shortest_paths(graph, source, target, k):
     return paths
 
 
+
+def get_laplacian_matrix(graph):
+    '''
+    返回图的拉普拉斯矩阵
+    :param graph:
+    :return:
+    '''
+    sup = nx.normalized_laplacian_matrix(graph).todense()
+    return sup
+
+def get_support_matrix(graph):
+    pass
+
 def nodeGraph_to_edgeGraph(graph, support=False):
     num_edges = graph.number_of_edges()
     edges_attr = {}

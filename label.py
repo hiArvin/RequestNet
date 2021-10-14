@@ -269,3 +269,7 @@ def solver(graph, shortest_path, flow, occupy, capacity, num_paths, num_quests=1
             success -= 1
         occupy = occupy + sp[q, c[q], :]
     return c, occupy, success,delay, t_ - t
+
+
+# class Solver:
+#     pass
