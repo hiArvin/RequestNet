@@ -145,7 +145,9 @@ class DataProcessor:
         bandwidth = self.bandwidth
         traffic = np.zeros_like(bandwidth)
         for f in flows:
+            sp = self.flow_to_numpy(f)
             label, delay = delay_solver(self.num_edges, self.num_flows, self.num_paths, sp, traffic, self.bandwidth)
+            self.update_traffic()
 
     def update_traffic(self):
         pass
