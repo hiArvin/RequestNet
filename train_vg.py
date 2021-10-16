@@ -89,7 +89,7 @@ def gen_feed_dict():
                                                             num_quests=NUM_QUESTS)
     # normalize
     ff = np.concatenate([[layer / np.max(layer)], [traffic / bandwidth]], axis=0)
-    # process sp feature
+    # process sp_numpy feature
     fp1 = sp / np.tile(bandwidth, [NUM_QUESTS * NUM_PATHS, 1])
     rest_cap = bandwidth - traffic
     s_fp = np.where(rest_cap <= 0, -100, rest_cap)
@@ -120,7 +120,7 @@ for epoch in range(EPOCHS):
     #     print('Bandwidth Reset!')
     #     traffic = np.zeros_like(bandwidth)
     # else:
-    #     traffic, _ = update(lb, sp, traffic,bandwidth)
+    #     traffic, _ = update(lb, sp_numpy, traffic,bandwidth)
     # Training step
     outs = sess.run([model.outputs, model.loss, model.accuracy, model.opt_op], feed_dict=feed_dict)
     # Print results

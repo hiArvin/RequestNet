@@ -88,7 +88,7 @@ for epoch in range(NUM_EPOCHES):
     paths, idx_list, seqs, sp, shortest_path = \
         gen_paths(topo.graph,ep_flows,NUM_PATHS,NUM_QUESTS)
     # f = np.concatenate([[layer / np.max(layer)], [pre_cap / init_cap ]], axis=0)
-    # f = np.concatenate([f, sp / np.tile(init_cap, [NUM_QUESTS * NUM_PATHS, 1])])
+    # f = np.concatenate([f, sp_numpy / np.tile(init_cap, [NUM_QUESTS * NUM_PATHS, 1])])
     #
     # feed_dict = {
     #     placeholders['support']: support,
@@ -103,7 +103,7 @@ for epoch in range(NUM_EPOCHES):
     # out = np.nanargmax(out,axis=1)
     # print("Predictor outputs:",out)
     t2 = time.time()
-    # pre_cap, suc_num = update(out, sp, pre_cap)
+    # pre_cap, suc_num = update(out, sp_numpy, pre_cap)
     # pre_success_num += suc_num
 
     # no parallel solver - shortest path selection

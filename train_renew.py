@@ -62,7 +62,7 @@ class Trainer:
         sp = self.data_procesor.flow_to_numpy(flows)
         paths, idx, seqs = self.data_procesor.generate_seqs(flows)
         support_matrix = self.data_procesor.get_laplacian_matrix()
-        labels = self.data_procesor.generate_delay_label(sp,traffic,bandwidth)
+        labels, delay_opt = self.data_procesor.generate_delay_label(sp, traffic, bandwidth)
 
         sp_flatten = sp.reshape([len(flows) * self.num_paths, self.num_edges])
         print(sp_flatten)
@@ -70,24 +70,16 @@ class Trainer:
         # Construct feed dictionary
         feed_dict = construct_feed_dict(fp2.T, support_matrix, labels, paths, idx, seqs, self.placeholders)
         feed_dict.update({self.placeholders['dropout']: 0.})
-        return feed_dict, labels, sp_flatten
+        return feed_dict, labels, sp, delay_opt
 
     def train(self):
         # Train model
         acc_num = 0
         early_stop = 0
         for epoch in range(self.epoches):
-            feed_dict, labels, sp = self.gen_feed_dict()
+            feed_dict, labels, sp_numpy,delay_opt = self.gen_feed_dict()
             lb = np.nanargmax(labels, axis=1)
             print("Labels   :\t", lb)
-            # update
-            # if lb.max() == lb.min():
-            #     continue
-            # if (epoch+1) % refresh == 0:
-            #     print('Bandwidth Reset!')
-            #     traffic = np.zeros_like(bandwidth)
-            # else:
-            #     traffic, _ = update(lb, sp, traffic,bandwidth)
             # Training step
             outs = self.sess.run([self.model.outputs, self.model.loss, self.model.accuracy, self.model.opt_op], feed_dict=feed_dict)
             # Print results
@@ -95,10 +87,30 @@ class Trainer:
             # print("Outputs(line1):", outs[0][0])
             print("Epoch:", '%04d' % (epoch + 1), "train_loss=", "{:.5f}".format(outs[1]),
                   "train_acc=", "{:.5f}".format(outs[2]))
-
             if self.save:
                 summary = self.sess.run(self.merged, feed_dict=feed_dict)
                 self.summary_writer.add_summary(summary, epoch)
+
+    def evaluate(self):
+        for epoche in range(self.epoches/10):
+            bandwidth = self.data_procesor.bandwidth
+            flows = self.data_procesor.generate_flows()
+            sp = self.data_procesor.flow_to_numpy(flows)
+            paths, idx, seqs = self.data_procesor.generate_seqs(flows)
+            support_matrix = self.data_procesor.get_laplacian_matrix()
+            sp_flatten = sp.reshape([len(flows) * self.num_paths, self.num_edges])
+            fp2 = sp_flatten / np.tile(bandwidth * self.args.max_rate, [self.num_flows * self.num_paths, 1])
+            feed_dict = {
+                self.placeholders['support']: support_matrix,
+                self.placeholders['features']: fp2.T,
+                self.placeholders['paths']: paths,
+                self.placeholders['index']: idx,
+                self.placeholders['sequences']: seqs,
+            }
+            outs_pd = self.sess.run(self.model.outputs, feed_dict=feed_dict)
+            delay_pd = self.data_procesor.cal_delay_for_model(sp,outs_pd)
+            outs_seq,delay_seq= self.data_procesor.sequential_delay_outputs(flows)
+            print(delay_seq-delay_pd)
 
 
 if __name__ == "__main__":

@@ -167,7 +167,7 @@ for epoch in range(NUM_EPOCHES):
         '''
         output info
         0 - pred
-        1 - sp
+        1 - sp_numpy
         2 - opt
         '''
         pd_delay = cal_total_delay(traffic_pre, bandwidth)

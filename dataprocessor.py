@@ -74,24 +74,24 @@ class DataProcessor:
                 for i in range(self.num_paths - len(k_sp)):
                     k_sp.append(k_sp[0])
                 random.shuffle(k_sp)
-                shortest_path[src][dst]=k_sp
+                shortest_path[src][dst] = k_sp
         return shortest_path
 
     def generate_flows(self):
         flows = []
         count = 0
-        while(count<self.num_flows):
+        while (count < self.num_flows):
             nodes = list(self.node_graph.nodes)
-            s, d = random.sample(nodes,2)
-            flow_size = np.random.randint(self.min_rate*self.bandwidth,self.max_rate*self.bandwidth,1)
-            if nx.shortest_path_length(self.node_graph,s,d)>=4:
-                flows.append([s,d,int(flow_size)])
-                count+=1
+            s, d = random.sample(nodes, 2)
+            flow_size = np.random.randint(self.min_rate * self.bandwidth, self.max_rate * self.bandwidth, 1)
+            if nx.shortest_path_length(self.node_graph, s, d) >= 4:
+                flows.append([s, d, int(flow_size)])
+                count += 1
         return flows
 
-    def flow_to_numpy(self,flows):
+    def flow_to_numpy(self, flows):
         # print('shortest paths (nodes): ',shortest_path)
-        sp = np.zeros([len(flows),self.num_paths, self.num_edges], dtype=np.int)
+        sp = np.zeros([len(flows), self.num_paths, self.num_edges], dtype=np.int)
         edges = pd.DataFrame(nx.edges(self.node_graph, nbunch=None), columns=['src', 'dst'])
         for f in range(len(flows)):
             src, dst, flow_size = flows[f]
@@ -102,8 +102,8 @@ class DataProcessor:
                     idx = edges[((edges.src == simple_path[i]) & (edges.dst == simple_path[i + 1])) |
                                 ((edges.dst == simple_path[i]) & (edges.src == simple_path[i + 1]))].index[0]
                     sp[f, p, idx] = flow_size
-                # print( sp[f, p,:])
-        # sp = sp.reshape([len(flows) * self.num_paths, self.num_edges])
+                # print( sp_numpy[f, p,:])
+        # sp_numpy = sp_numpy.reshape([len(flows) * self.num_paths, self.num_edges])
         return sp
 
     def generate_seqs(self, flows):
@@ -112,7 +112,7 @@ class DataProcessor:
         seqs = []
         edges = pd.DataFrame(nx.edges(self.node_graph, nbunch=None), columns=['src', 'dst'])
         for i in range(len(flows)):
-            src,dst,flow_size = flows[i]
+            src, dst, flow_size = flows[i]
             for p in range(self.num_paths):
                 pp = []
                 path = self.shortest_paths[src][dst][p]
@@ -129,8 +129,8 @@ class DataProcessor:
         seqs = list(deepflatten(seqs))
         return paths, idx_list, seqs
 
-    def generate_delay_label(self,sp,occupy, init_bd):
-        res_selct, delay = delay_solver(self.num_edges, self.num_flows, self.num_paths, sp, occupy, init_bd)
+    def generate_delay_label(self, sp, traffic, init_bd):
+        res_selct, delay = delay_solver(self.num_edges, self.num_flows, self.num_paths, sp, traffic, init_bd)
         # convert to label
         label = np.zeros([self.num_flows, self.num_paths], dtype=np.int64)
         for q in range(self.num_flows):
@@ -139,18 +139,27 @@ class DataProcessor:
                     label[q, p] = 1
                     break
 
-        return label
+        return label, delay
 
-    def sequential_delay_outputs(self):
+    def cal_delay_for_model(self, sp, outs):
+        traffic = np.sum(np.multiply(np.expand_dims(outs,-1).repeat(self.num_edges,-1),sp),axis=1)
+        traffic = np.sum(traffic,axis=0)
+        delay = cal_total_delay(traffic,self.bandwidth)
+        return delay
+
+    def sequential_delay_outputs(self, flows):
         bandwidth = self.bandwidth
         traffic = np.zeros_like(bandwidth)
-        for f in flows:
-            sp = self.flow_to_numpy(f)
-            label, delay = delay_solver(self.num_edges, self.num_flows, self.num_paths, sp, traffic, self.bandwidth)
-            self.update_traffic()
-
-    def update_traffic(self):
-        pass
+        outputs = np.zeros(len(flows), dtype=int)
+        delay = None
+        for i in range(self.num_flows):
+            flow = flows[i]
+            sp = self.flow_to_numpy([flow])
+            label, delay = delay_solver(self.num_edges, 1, self.num_paths, sp, traffic, self.bandwidth)
+            res = np.argmax(label[0])
+            outputs[i] = res
+            traffic = traffic + sp[0][res]
+        return outputs, delay
 
 
 if __name__ == "__main__":
@@ -163,10 +172,26 @@ if __name__ == "__main__":
             self.max_rate = 0.05
             self.min_rate = 0.001
 
-
     args = Args()
     dp = DataProcessor(args)
-    dp.init_bandwidth()
-
     flows = dp.generate_flows()
     print(flows)
+    outs_seq, delay_seq = dp.sequential_delay_outputs(flows)
+    sp_numpy = dp.flow_to_numpy(flows)
+    traffic = np.zeros_like(dp.bandwidth)
+    outs_gb, delay_gb = dp.generate_delay_label(sp_numpy, traffic, dp.bandwidth)
+    print(outs_seq)
+    print(np.argmax(outs_gb, axis=1))
+    print(sum(delay_seq) - sum(delay_gb))
+    outs = np.array([[0, 0, 0, 0, 1],
+                     [0, 0, 0, 0, 1],
+                     [0, 0, 0, 0, 1],
+                     [0, 0, 0, 0, 1],
+                     [0, 0, 0, 0, 1],
+                     [0, 0, 0, 0, 1],
+                     [0, 0, 0, 0, 1],
+                     [0, 0, 0, 0, 1],
+                     [0, 0, 0, 0, 1],
+                     [0, 0, 0, 0, 1]])
+    delay_pd = dp.cal_delay_for_model(sp_numpy, outs)
+    print(delay_pd)

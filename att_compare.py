@@ -94,7 +94,7 @@ def deduce_attention(sp,labels):
     #     for qq in range(q+1,NUM_QUESTS):
     #         for p in range(NUM_PATHS):
     #             for pp in range(NUM_PATHS):
-    #                 importance[q,qq]+=len(set(sp[q][p]).intersection(set(sp[qq][pp])))
+    #                 importance[q,qq]+=len(set(sp_numpy[q][p]).intersection(set(sp_numpy[qq][pp])))
     # importance+=importance.T
     # return np.nanargmax(importance,axis=1)
 
