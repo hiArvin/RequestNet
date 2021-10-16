@@ -1,7 +1,7 @@
 from utils import *
 import random
 from iteration_utilities import deepflatten
-from label import delay_solver
+from label import delay_solver, solver
 
 
 class DataProcessor:
@@ -12,8 +12,10 @@ class DataProcessor:
         self.num_flows = args.num_flows
 
         self.node_graph = self.get_topozoo_graph(args.training_graph)
-        self.num_nodes = nx.number_of_edges(self.node_graph)
-        self.num_edges = nx.number_of_nodes(self.node_graph)
+        self.num_nodes = nx.number_of_nodes(self.node_graph)
+        self.num_edges = nx.number_of_edges(self.node_graph)
+        self.max_rate = args.max_rate
+        self.min_rate = args.min_rate
 
         self.edge_graph = self.nodeGraph_2_edgeGraph()
 
@@ -75,32 +77,36 @@ class DataProcessor:
                 shortest_path[src][dst]=k_sp
         return shortest_path
 
-    def generate_flows(self,high_percent=0.05, low_percent=0.001):
+    def generate_flows(self):
         flows = []
-        for f in range(self.num_flows):
+        count = 0
+        while(count<self.num_flows):
             nodes = list(self.node_graph.nodes)
-            s, d = np.random.choice(nodes,2)
-            flow_size = np.random.randint(low_percent*self.bandwidth,high_percent*self.bandwidth,1)
-            flows.append([s,d,int(flow_size)])
+            s, d = random.sample(nodes,2)
+            flow_size = np.random.randint(self.min_rate*self.bandwidth,self.max_rate*self.bandwidth,1)
+            if nx.shortest_path_length(self.node_graph,s,d)>=4:
+                flows.append([s,d,int(flow_size)])
+                count+=1
         return flows
 
     def flow_to_numpy(self,flows):
         # print('shortest paths (nodes): ',shortest_path)
         sp = np.zeros([len(flows),self.num_paths, self.num_edges], dtype=np.int)
         edges = pd.DataFrame(nx.edges(self.node_graph, nbunch=None), columns=['src', 'dst'])
-        for i in range(len(flows)):
-            src, dst, flow_size = flows[i]
+        for f in range(len(flows)):
+            src, dst, flow_size = flows[f]
             for p in range(self.num_paths):
+                # print(src,dst,p)
                 simple_path = self.shortest_paths[src][dst][p]
-                idx = edges[((edges.src == simple_path[i]) & (edges.dst == simple_path[i + 1])) |
-                            ((edges.dst == simple_path[i]) & (edges.src == simple_path[i + 1]))].index[0]
                 for i in range(len(simple_path) - 1):
-                    sp[i, p, idx] = flow_size
-
-        sp = sp.reshape([len(flows) * self.num_paths, self.num_edges])
+                    idx = edges[((edges.src == simple_path[i]) & (edges.dst == simple_path[i + 1])) |
+                                ((edges.dst == simple_path[i]) & (edges.src == simple_path[i + 1]))].index[0]
+                    sp[f, p, idx] = flow_size
+                # print( sp[f, p,:])
+        # sp = sp.reshape([len(flows) * self.num_paths, self.num_edges])
         return sp
 
-    def generate_seqs(self,flows):
+    def generate_seqs(self, flows):
         paths = []
         idx_list = []
         seqs = []
@@ -109,7 +115,7 @@ class DataProcessor:
             src,dst,flow_size = flows[i]
             for p in range(self.num_paths):
                 pp = []
-                path = self.shortest_paths[src][dst][[]]
+                path = self.shortest_paths[src][dst][p]
                 for i in range(len(path) - 1):
                     idx = edges[((edges.src == path[i]) & (edges.dst == path[i + 1])) |
                                 ((edges.dst == path[i]) & (edges.src == path[i + 1]))].index[0]
@@ -125,7 +131,24 @@ class DataProcessor:
 
     def generate_delay_label(self,sp,occupy, init_bd):
         res_selct, delay = delay_solver(self.num_edges, self.num_flows, self.num_paths, sp, occupy, init_bd)
+        # convert to label
+        label = np.zeros([self.num_flows, self.num_paths], dtype=np.int64)
+        for q in range(self.num_flows):
+            for p in range(self.num_paths):
+                if res_selct[q, p] == 1:
+                    label[q, p] = 1
+                    break
 
+        return label
+
+    def sequential_delay_outputs(self):
+        bandwidth = self.bandwidth
+        traffic = np.zeros_like(bandwidth)
+        for f in flows:
+            label, delay = delay_solver(self.num_edges, self.num_flows, self.num_paths, sp, traffic, self.bandwidth)
+
+    def update_traffic(self):
+        pass
 
 
 if __name__ == "__main__":
@@ -135,10 +158,13 @@ if __name__ == "__main__":
             self.random_bandwidth = False
             self.num_paths = 5
             self.num_flows = 10
+            self.max_rate = 0.05
+            self.min_rate = 0.001
 
 
     args = Args()
     dp = DataProcessor(args)
     dp.init_bandwidth()
-    flows = dp.generate_flows(20)
+
+    flows = dp.generate_flows()
     print(flows)
