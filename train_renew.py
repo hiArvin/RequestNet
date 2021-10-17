@@ -92,7 +92,7 @@ class Trainer:
                 self.summary_writer.add_summary(summary, epoch)
 
     def evaluate(self):
-        for epoche in range(self.epoches/10):
+        for epoche in range(int(5)):
             bandwidth = self.data_procesor.bandwidth
             flows = self.data_procesor.generate_flows()
             sp = self.data_procesor.flow_to_numpy(flows)
@@ -107,11 +107,19 @@ class Trainer:
                 self.placeholders['index']: idx,
                 self.placeholders['sequences']: seqs,
             }
+            time1 = time.time()
             outs_pd = self.sess.run(self.model.outputs, feed_dict=feed_dict)
+            time2 = time.time()
+            outs_pd= np.nanargmax(softmax(outs_pd), axis=1)
             delay_pd = self.data_procesor.cal_delay_for_model(sp,outs_pd)
+            time3 = time.time()
             outs_seq,delay_seq= self.data_procesor.sequential_delay_outputs(flows)
-            print(delay_seq-delay_pd)
-
+            time4=time.time()
+            traffic = np.zeros_like(bandwidth,dtype=int)
+            label,delay_opt= self.data_procesor.generate_delay_label(sp,traffic ,bandwidth)
+            time5 = time.time()
+            print("延迟", sum(delay_pd), np.sum(delay_seq),np.sum(delay_opt))
+            print("时间",time2-time1,'\t',time4-time3,'\t',time5-time4)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -119,7 +127,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_paths",type=int, help="Number of candidate paths for a flow")
     parser.add_argument("--epoches",type=int, help="training epoches")
     parser.add_argument("--max_rate",type=float, default=0.05,help="flow size / bandwidth")
-    parser.add_argument("--min_rate",type=float, default=0.01,help="flow size / bandwidth")
+    parser.add_argument("--min_rate",type=float, default=0.001,help="flow size / bandwidth")
     parser.add_argument("--random_bandwidth", default=False)
     parser.add_argument("--training_graph", default="Aarnet.graphml")
     parser.add_argument("--learning_rate", default=0.005)
@@ -129,3 +137,4 @@ if __name__ == "__main__":
     data_procesor = DataProcessor(args)
     trainer = Trainer(args,data_procesor)
     trainer.train()
+    trainer.evaluate()

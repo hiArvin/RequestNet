@@ -22,7 +22,7 @@ graph = topo.graph
 NUM_EDGES = nx.number_of_edges(graph)
 NUM_NODES = nx.number_of_nodes(graph)
 NUM_PATHS = 5  # at least 4
-NUM_QUESTS = 10
+NUM_QUESTS = 20
 refresh = 5
 LR = 0.005  # 0.005 is the best until now
 Min_Cap = 200  # *100
@@ -79,14 +79,16 @@ def update(choose, sp, traffic, init_bd):
 
 
 def gen_feed_dict():
-    bandwidth = np.random.randint(Min_Cap,Max_Cap,size=NUM_EDGES)*100
+    bandwidth = np.random.randint(Min_Cap,Max_Cap,size=NUM_EDGES) * 100
     traffic = np.random.randint(Min_Cap//5 * 100, Min_Cap//3 * 100, size=NUM_EDGES)
+    print(traffic, bandwidth)
     flow = []
     for i in range(NUM_QUESTS):
         flow.append(next(flow_generator))
     paths, idx, seqs, labels, sp, shortest_path = gen_label(topo.graph, flow, traffic, bandwidth, target='delay',
                                                             num_paths=NUM_PATHS,
-                                                            num_quests=NUM_QUESTS)
+                                                            num_flows=NUM_QUESTS)
+    print(shortest_path)
     # normalize
     ff = np.concatenate([[layer / np.max(layer)], [traffic / bandwidth]], axis=0)
     # process sp_numpy feature

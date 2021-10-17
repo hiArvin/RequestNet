@@ -84,7 +84,7 @@ class DataProcessor:
             nodes = list(self.node_graph.nodes)
             s, d = random.sample(nodes, 2)
             flow_size = np.random.randint(self.min_rate * self.bandwidth, self.max_rate * self.bandwidth, 1)
-            if nx.shortest_path_length(self.node_graph, s, d) >= 4:
+            if nx.shortest_path_length(self.node_graph, s, d) >= 8:
                 flows.append([s, d, int(flow_size)])
                 count += 1
         return flows
@@ -142,6 +142,7 @@ class DataProcessor:
         return label, delay
 
     def cal_delay_for_model(self, sp, outs):
+        outs = np.eye(self.num_paths,dtype=int)[outs]
         traffic = np.sum(np.multiply(np.expand_dims(outs,-1).repeat(self.num_edges,-1),sp),axis=1)
         traffic = np.sum(traffic,axis=0)
         delay = cal_total_delay(traffic,self.bandwidth)
@@ -182,16 +183,9 @@ if __name__ == "__main__":
     outs_gb, delay_gb = dp.generate_delay_label(sp_numpy, traffic, dp.bandwidth)
     print(outs_seq)
     print(np.argmax(outs_gb, axis=1))
+    print(delay_gb)
+    print(delay_seq)
     print(sum(delay_seq) - sum(delay_gb))
-    outs = np.array([[0, 0, 0, 0, 1],
-                     [0, 0, 0, 0, 1],
-                     [0, 0, 0, 0, 1],
-                     [0, 0, 0, 0, 1],
-                     [0, 0, 0, 0, 1],
-                     [0, 0, 0, 0, 1],
-                     [0, 0, 0, 0, 1],
-                     [0, 0, 0, 0, 1],
-                     [0, 0, 0, 0, 1],
-                     [0, 0, 0, 0, 1]])
+    outs = np.array([1,2,1,2,1,2,1,2,1,2])
     delay_pd = dp.cal_delay_for_model(sp_numpy, outs)
     print(delay_pd)

@@ -219,7 +219,7 @@ def cal_path_delay(path, now_cap, init_cap):
 
 def cal_total_delay(traffic, init_bd):
     edges = len(init_bd)
-    sum_delay = 0
+    delay = np.zeros_like(init_bd,dtype=int)
     for e in range(edges):
         l = traffic[e]
         c = init_bd[e]
@@ -235,5 +235,5 @@ def cal_total_delay(traffic, init_bd):
             d = 500 * l - 1468 / 3 * c
         else:
             d = 5000 * l - 16318 / 3 * c
-        sum_delay += d
-    return sum_delay
+        delay[e] = d
+    return delay
