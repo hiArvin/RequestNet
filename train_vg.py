@@ -81,6 +81,7 @@ def update(choose, sp, traffic, init_bd):
 def gen_feed_dict():
     bandwidth = np.random.randint(Min_Cap,Max_Cap,size=NUM_EDGES) * 100
     traffic = np.random.randint(Min_Cap//5 * 100, Min_Cap//3 * 100, size=NUM_EDGES)
+
     print(traffic, bandwidth)
     flow = []
     for i in range(NUM_QUESTS):

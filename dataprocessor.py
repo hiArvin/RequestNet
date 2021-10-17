@@ -2,7 +2,7 @@ from utils import *
 import random
 from iteration_utilities import deepflatten
 from label import delay_solver, solver
-
+from topology import Topology
 
 class DataProcessor:
     def __init__(self, args):
@@ -10,17 +10,31 @@ class DataProcessor:
         self.random_bandwidth = args.random_bandwidth
         self.num_paths = args.num_paths
         self.num_flows = args.num_flows
-
-        self.node_graph = self.get_topozoo_graph(args.training_graph)
-        self.num_nodes = nx.number_of_nodes(self.node_graph)
-        self.num_edges = nx.number_of_edges(self.node_graph)
         self.max_rate = args.max_rate
         self.min_rate = args.min_rate
+
+        if 'ZTE' in args.training_graph:
+            self.node_graph =  self.get_ZTE_graph(args.training_graph)
+            self.generate_flows = self.generate_ZTE_flows
+        else:
+            self.node_graph = self.get_topozoo_graph(args.training_graph)
+            self.generate_flows = self.generate_topozoo_flows
+        self.num_nodes = nx.number_of_nodes(self.node_graph)
+        self.num_edges = nx.number_of_edges(self.node_graph)
+
 
         self.edge_graph = self.nodeGraph_2_edgeGraph()
 
         self.init_bandwidth()
         self.shortest_paths = self.gen_paths()
+
+    def get_ZTE_graph(self,graph_name):
+        cfg = graph_name.split('-')
+        num_core, num_converge, num_access = 1, 1, 1
+        if len(cfg) == 4:
+            _, num_core, num_converge, num_access = cfg
+        topo = Topology(num_core=num_core, num_converge=num_converge, num_access=num_access)
+        return topo.graph
 
     def get_topozoo_graph(self, graph_name):
         dataset_path = "dataset/"
@@ -77,14 +91,54 @@ class DataProcessor:
                 shortest_path[src][dst] = k_sp
         return shortest_path
 
-    def generate_flows(self):
+    def zte_flow_generator(self):
+        source_nodes = []
+        dest_nodes = list(self.node_graph.nodes)
+        for node in self.node_graph.nodes:
+            if self.node_graph.nodes[node]['layer'] == 'access layer':
+                source_nodes.append(node)
+        while True:
+            s = int(np.random.choice(source_nodes, 1))
+            d = int(np.random.choice(dest_nodes, 1))
+            if self._helper_vail_s_d(s, d):
+                yield [s, d, int(np.random.uniform(self.min_rate * self.bandwidth[0], self.max_rate * self.bandwidth[0]))]
+
+    def _helper_vail_s_d(self, s, d):
+        s = self.node_graph.nodes[s]
+        d = self.node_graph.nodes[d]
+        if d['layer'] == 'core layer' or d['layer'] == 'metro cross':
+            return True
+        elif d['layer'] == 'converge layer':
+            if s['IGP_num'] != d['IGP_num']:
+                return True
+            elif d['ring_num'] == s['CONV_num']:
+                return False
+        else:
+            if s['IGP_num'] != d['IGP_num']:
+                return True
+            elif s['CONV_num'] != d['CONV_num']:
+                return True
+            elif s['ring_num'] != d['ring_num']:
+                return True
+            else:
+                return False
+
+    def generate_ZTE_flows(self):
+        flows = []
+        flow_generator = self.zte_flow_generator()
+        for i in range(self.num_flows):
+            flows.append(next(flow_generator))
+        return flows
+
+    def generate_topozoo_flows(self):
+        # ZTE generator
         flows = []
         count = 0
         while (count < self.num_flows):
             nodes = list(self.node_graph.nodes)
             s, d = random.sample(nodes, 2)
             flow_size = np.random.randint(self.min_rate * self.bandwidth, self.max_rate * self.bandwidth, 1)
-            if nx.shortest_path_length(self.node_graph, s, d) >= 8:
+            if nx.shortest_path_length(self.node_graph, s, d) >= 3:
                 flows.append([s, d, int(flow_size)])
                 count += 1
         return flows

@@ -28,7 +28,7 @@
 # plt.show()
 import networkx as nx
 dataset_path = "dataset/"
-graph_path = dataset_path + "Aarnet.graphml"
+graph_path = dataset_path + "Agis.graphml"
 graph = nx.read_graphml(graph_path, node_type=int)
 
 print(nx.number_of_nodes(graph))

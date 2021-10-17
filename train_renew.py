@@ -65,10 +65,15 @@ class Trainer:
         labels, delay_opt = self.data_procesor.generate_delay_label(sp, traffic, bandwidth)
 
         sp_flatten = sp.reshape([len(flows) * self.num_paths, self.num_edges])
-        print(sp_flatten)
-        fp2 = sp_flatten / np.tile(bandwidth*self.args.max_rate, [self.num_flows * self.num_paths, 1])
+        # normalization
+        mask = sp_flatten!=0
+        feature = sp_flatten - mask * bandwidth * self.args.min_rate
+        print(feature)
+        print(mask * bandwidth * self.args.min_rate)
+        feature = feature / (np.ones_like(sp_flatten)*(bandwidth[0]*self.args.max_rate-bandwidth[0]*self.args.min_rate))
+        print(feature)
         # Construct feed dictionary
-        feed_dict = construct_feed_dict(fp2.T, support_matrix, labels, paths, idx, seqs, self.placeholders)
+        feed_dict = construct_feed_dict(feature.T, support_matrix, labels, paths, idx, seqs, self.placeholders)
         feed_dict.update({self.placeholders['dropout']: 0.})
         return feed_dict, labels, sp, delay_opt
 
