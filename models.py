@@ -216,6 +216,9 @@ class PEM(Model):
     def predict(self):
         return tf.nn.softmax(self.outputs)
 
+    def cal_gradient(self):
+        return tf.gradients(self.outputs, self.placeholders['features'])
+
     def save(self, sess=None, path=None):
         if not sess:
             raise AttributeError("TensorFlow session not provided.")

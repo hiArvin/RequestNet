@@ -44,9 +44,11 @@ class Trainer:
 
         if self.save:
             self.merged = tf.summary.merge_all()
-            save_path = './logs/' + datetime.now().strftime('%m%d-%H%M')
-            save_path += '-Q' + str(self.num_flows) + '-P' + str(self.num_paths)
-            self.summary_writer = tf.summary.FileWriter(save_path, graph=self.sess.graph)
+            self.save_path = './logs/' + datetime.now().strftime('%m%d-%H%M')
+            graph_name = self.args.graph_name.split('-')[0]
+            graph_name = graph_name.split('.')[0]
+            self.save_path += '-' + graph_name + '-Q' + str(self.num_flows) + '-P' + str(self.num_paths)
+            self.summary_writer = tf.summary.FileWriter(self.save_path, graph=self.sess.graph)
 
         # Init variables
         self.sess.run(tf.global_variables_initializer())
@@ -66,11 +68,11 @@ class Trainer:
         # normalization
         mask = sp_flatten != 0
         feature = sp_flatten - mask * bandwidth * self.args.min_rate
-        print(feature)
-        print(mask * bandwidth * self.args.min_rate)
+        # print(feature)
+        # print(mask * bandwidth * self.args.min_rate)
         feature = feature / (
                     np.ones_like(sp_flatten) * (bandwidth[0] * self.args.max_rate - bandwidth[0] * self.args.min_rate))
-        print(feature)
+        # print(feature)
         # Construct feed dictionary
         feed_dict = construct_feed_dict(feature.T, support_matrix, labels, paths, idx, seqs, self.placeholders)
         feed_dict.update({self.placeholders['dropout']: 0.})
@@ -95,6 +97,8 @@ class Trainer:
             if self.save:
                 summary = self.sess.run(self.merged, feed_dict=feed_dict)
                 self.summary_writer.add_summary(summary, epoch)
+        if self.save:
+            self.model.save(self.sess, self.save_path)
 
 
 
@@ -115,4 +119,3 @@ if __name__ == "__main__":
     data_processor = DataProcessor(args)
     trainer = Trainer(args, data_processor)
     trainer.train()
-    trainer.evaluate()

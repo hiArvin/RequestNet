@@ -4,10 +4,13 @@ import argparse
 import tensorflow as tf
 from utils import *
 from models import PEM
+import seaborn as sns
+import matplotlib.pyplot as plt
 from dataprocessor import DataProcessor
 
+
 class Evaluate:
-    def __init__(self,args,data_processor):
+    def __init__(self, args, data_processor):
         self.args = args
         # hyper-parameters
         self.num_flows = args.num_flows
@@ -26,12 +29,17 @@ class Evaluate:
             'index': tf.placeholder(tf.int64),
             'sequences': tf.placeholder(tf.int64)
         }
-        self.model = PEM(num_paths=self.num_paths, num_edges=self.num_edges, num_quests=self.num_flows,
+        self.model = PEM(num_paths=self.num_paths,
+                         num_edges=self.num_edges,
+                         num_quests=self.num_flows,
                          placeholders=self.placeholders,
-                         learning_rate=self.lr, gcn_input_dim=self.num_paths * self.num_flows,
-                         gcn_hidden_dim=16, gcn_output_dim=8, pe_output_dim=4, att_layers_num=3)
+                         gcn_input_dim=self.num_paths * self.num_flows,
+                         gcn_hidden_dim=16,
+                         gcn_output_dim=8,
+                         pe_output_dim=4,
+                         att_layers_num=3)
         self.sess = tf.Session()
-        self.model.load(self.sess,self.model_path)
+        self.model.load(self.sess, self.model_path)
 
     def evaluate(self):
         for epoch in range(self.epochs):
@@ -63,12 +71,50 @@ class Evaluate:
             print("延迟", sum(delay_pd), np.sum(delay_seq), np.sum(delay_opt))
             print("时间", time2 - time1, '\t', time4 - time3, '\t', time5 - time4)
 
+    def integrated_grads(self, M=20):
+        bandwidth = self.data_processor.bandwidth
+        flows = self.data_processor.generate_flows()
+        sp = self.data_processor.flow_to_numpy(flows)
+        paths, idx, seqs = self.data_processor.generate_seqs(flows)
+        support_matrix = self.data_processor.get_laplacian_matrix()
+        sp_flatten = sp.reshape([len(flows) * self.num_paths, self.num_edges])
+        fp2 = sp_flatten / np.tile(bandwidth * self.args.max_rate, [self.num_flows * self.num_paths, 1])
+        features = fp2.T
+        ig = np.zeros([self.data_processor.num_edges, self.num_paths * self.num_flows])
+        for m in range(M):
+            feed_dict = {
+                self.placeholders['support']: support_matrix,
+                self.placeholders['features']: features * m / M,
+                self.placeholders['paths']: paths,
+                self.placeholders['index']: idx,
+                self.placeholders['sequences']: seqs,
+            }
+            gradient = self.sess.run(self.model.cal_gradient(), feed_dict=feed_dict)
+            ig += gradient[0]
+        ig = features * ig / M
+        return ig
+
+    def visualize(self, g, if_end=False):
+        # ax1, ax2 = plt.plot(figsize=(10, 5))
+        sns.set(style='white')
+        # g = g-np.min(g)/(np.max(g)-np.min(g))  # normalize
+        if not if_end:
+            plt.figure(figsize=(4, 4))
+            sns.heatmap(g / np.max(g), cbar=False, cmap='YlGnBu', vmin=0, vmax=1, )
+        else:
+            sns.heatmap(g / np.max(g), cmap='YlGnBu', vmin=0, vmax=1,)
+
+        # plt.imshow(g)
+        plt.axis("off")
+        plt.savefig("visualization/test.png")
+        plt.close()
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_flows", type=int, help="Number of flows process in an epoch")
     parser.add_argument("--num_paths", type=int, help="Number of candidate paths for a flow")
     parser.add_argument("--epochs", type=int, help="Evaluation epochs")
-    parser.add_argument("--model_path",help="Path of trained model")
+    parser.add_argument("--model_path", help="Path of trained model")
     parser.add_argument("--max_rate", type=float, default=0.05, help="flow size / bandwidth")
     parser.add_argument("--min_rate", type=float, default=0.001, help="flow size / bandwidth")
     parser.add_argument("--random_bandwidth", default=False)
@@ -76,5 +122,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     dp = DataProcessor(args)
-    eva = Evaluate(args,dp)
+    eva = Evaluate(args, dp)
     eva.evaluate()
+    grad = eva.integrated_grads()
+    eva.visualize(grad)
