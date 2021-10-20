@@ -4,6 +4,7 @@ from iteration_utilities import deepflatten
 from label import delay_solver, solver
 from topology import Topology
 
+
 class DataProcessor:
     def __init__(self, args):
         self.args = args
@@ -13,26 +14,26 @@ class DataProcessor:
         self.max_rate = args.max_rate
         self.min_rate = args.min_rate
 
-        if 'ZTE' in args.training_graph:
-            self.node_graph =  self.get_ZTE_graph(args.training_graph)
+        if 'ZTE' in args.graph_name:
+            self.node_graph = self.get_ZTE_graph(args.graph_name)
             self.generate_flows = self.generate_ZTE_flows
         else:
-            self.node_graph = self.get_topozoo_graph(args.training_graph)
+            self.node_graph = self.get_topozoo_graph(args.graph_name)
             self.generate_flows = self.generate_topozoo_flows
         self.num_nodes = nx.number_of_nodes(self.node_graph)
         self.num_edges = nx.number_of_edges(self.node_graph)
-
 
         self.edge_graph = self.nodeGraph_2_edgeGraph()
 
         self.init_bandwidth()
         self.shortest_paths = self.gen_paths()
 
-    def get_ZTE_graph(self,graph_name):
+    def get_ZTE_graph(self, graph_name):
         cfg = graph_name.split('-')
         num_core, num_converge, num_access = 1, 1, 1
         if len(cfg) == 4:
             _, num_core, num_converge, num_access = cfg
+            num_core, num_converge, num_access = int(num_core), int(num_converge), int(num_access)
         topo = Topology(num_core=num_core, num_converge=num_converge, num_access=num_access)
         return topo.graph
 
@@ -101,7 +102,8 @@ class DataProcessor:
             s = int(np.random.choice(source_nodes, 1))
             d = int(np.random.choice(dest_nodes, 1))
             if self._helper_vail_s_d(s, d):
-                yield [s, d, int(np.random.uniform(self.min_rate * self.bandwidth[0], self.max_rate * self.bandwidth[0]))]
+                yield [s, d,
+                       int(np.random.uniform(self.min_rate * self.bandwidth[0], self.max_rate * self.bandwidth[0]))]
 
     def _helper_vail_s_d(self, s, d):
         s = self.node_graph.nodes[s]
@@ -138,7 +140,7 @@ class DataProcessor:
             nodes = list(self.node_graph.nodes)
             s, d = random.sample(nodes, 2)
             flow_size = np.random.randint(self.min_rate * self.bandwidth, self.max_rate * self.bandwidth, 1)
-            if nx.shortest_path_length(self.node_graph, s, d) >= 3:
+            if nx.shortest_path_length(self.node_graph, s, d) >= 5:
                 flows.append([s, d, int(flow_size)])
                 count += 1
         return flows
@@ -196,10 +198,10 @@ class DataProcessor:
         return label, delay
 
     def cal_delay_for_model(self, sp, outs):
-        outs = np.eye(self.num_paths,dtype=int)[outs]
-        traffic = np.sum(np.multiply(np.expand_dims(outs,-1).repeat(self.num_edges,-1),sp),axis=1)
-        traffic = np.sum(traffic,axis=0)
-        delay = cal_total_delay(traffic,self.bandwidth)
+        outs = np.eye(self.num_paths, dtype=int)[outs]
+        traffic = np.sum(np.multiply(np.expand_dims(outs, -1).repeat(self.num_edges, -1), sp), axis=1)
+        traffic = np.sum(traffic, axis=0)
+        delay = cal_total_delay(traffic, self.bandwidth)
         return delay
 
     def sequential_delay_outputs(self, flows):
@@ -220,12 +222,13 @@ class DataProcessor:
 if __name__ == "__main__":
     class Args:
         def __init__(self):
-            self.training_graph = "Aarnet.graphml"
+            self.graph_name = "Aarnet.graphml"
             self.random_bandwidth = False
             self.num_paths = 5
             self.num_flows = 10
             self.max_rate = 0.05
             self.min_rate = 0.001
+
 
     args = Args()
     dp = DataProcessor(args)
@@ -240,6 +243,6 @@ if __name__ == "__main__":
     print(delay_gb)
     print(delay_seq)
     print(sum(delay_seq) - sum(delay_gb))
-    outs = np.array([1,2,1,2,1,2,1,2,1,2])
+    outs = np.array([1, 2, 1, 2, 1, 2, 1, 2, 1, 2])
     delay_pd = dp.cal_delay_for_model(sp_numpy, outs)
     print(delay_pd)

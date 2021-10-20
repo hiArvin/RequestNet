@@ -10,6 +10,13 @@
             </list>
           </settings>
         </remote-mappings>
+        <remote-mappings server-id="python@sftp://holan@a534.ink19.cn:22/home/holan/anaconda3/envs/tf1/bin/python">
+          <settings>
+            <list>
+              <mapping local-root="$PROJECT_DIR$" remote-root="/home/holan/RequestNet" />
+            </list>
+          </settings>
+        </remote-mappings>
       </list>
     </list>
   </component>

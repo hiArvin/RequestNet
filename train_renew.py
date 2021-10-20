@@ -12,19 +12,17 @@ import argparse
 
 
 class Trainer:
-    def __init__(self, args, data_procesor):
+    def __init__(self, args, data_processor):
         self.args = args
         # hyper-parameters
         self.num_flows = args.num_flows
         self.num_paths = args.num_paths
-        self.epoches = args.epoches
+        self.epochs = args.epochs
         self.lr = args.learning_rate
         self.save = args.save
 
-
-
-        self.data_procesor = data_procesor
-        self.num_edges = data_procesor.num_edges
+        self.data_processor = data_processor
+        self.num_edges = data_processor.num_edges
         self.placeholders = {
             'support': tf.placeholder(tf.float32, shape=(self.num_edges, self.num_edges)),
             'features': tf.placeholder(tf.float32),
@@ -54,23 +52,24 @@ class Trainer:
         self.sess.run(tf.global_variables_initializer())
 
     def gen_feed_dict(self):
-        bandwidth=self.data_procesor.bandwidth
+        bandwidth = self.data_processor.bandwidth
         # traffic = np.random.randint(Min_Cap // 5 * 100, Min_Cap // 3 * 100, size=NUM_EDGES)
         traffic = np.zeros(self.num_edges)
-        flows = self.data_procesor.generate_flows()
-        shortest_paths = self.data_procesor.shortest_paths
-        sp = self.data_procesor.flow_to_numpy(flows)
-        paths, idx, seqs = self.data_procesor.generate_seqs(flows)
-        support_matrix = self.data_procesor.get_laplacian_matrix()
-        labels, delay_opt = self.data_procesor.generate_delay_label(sp, traffic, bandwidth)
+        flows = self.data_processor.generate_flows()
+        shortest_paths = self.data_processor.shortest_paths
+        sp = self.data_processor.flow_to_numpy(flows)
+        paths, idx, seqs = self.data_processor.generate_seqs(flows)
+        support_matrix = self.data_processor.get_laplacian_matrix()
+        labels, delay_opt = self.data_processor.generate_delay_label(sp, traffic, bandwidth)
 
         sp_flatten = sp.reshape([len(flows) * self.num_paths, self.num_edges])
         # normalization
-        mask = sp_flatten!=0
+        mask = sp_flatten != 0
         feature = sp_flatten - mask * bandwidth * self.args.min_rate
         print(feature)
         print(mask * bandwidth * self.args.min_rate)
-        feature = feature / (np.ones_like(sp_flatten)*(bandwidth[0]*self.args.max_rate-bandwidth[0]*self.args.min_rate))
+        feature = feature / (
+                    np.ones_like(sp_flatten) * (bandwidth[0] * self.args.max_rate - bandwidth[0] * self.args.min_rate))
         print(feature)
         # Construct feed dictionary
         feed_dict = construct_feed_dict(feature.T, support_matrix, labels, paths, idx, seqs, self.placeholders)
@@ -81,12 +80,13 @@ class Trainer:
         # Train model
         acc_num = 0
         early_stop = 0
-        for epoch in range(self.epoches):
-            feed_dict, labels, sp_numpy,delay_opt = self.gen_feed_dict()
+        for epoch in range(self.epochs):
+            feed_dict, labels, sp_numpy, delay_opt = self.gen_feed_dict()
             lb = np.nanargmax(labels, axis=1)
             print("Labels   :\t", lb)
             # Training step
-            outs = self.sess.run([self.model.outputs, self.model.loss, self.model.accuracy, self.model.opt_op], feed_dict=feed_dict)
+            outs = self.sess.run([self.model.outputs, self.model.loss, self.model.accuracy, self.model.opt_op],
+                                 feed_dict=feed_dict)
             # Print results
             print('Predictor:\t', np.nanargmax(softmax(outs[0]), axis=1))
             # print("Outputs(line1):", outs[0][0])
@@ -96,50 +96,23 @@ class Trainer:
                 summary = self.sess.run(self.merged, feed_dict=feed_dict)
                 self.summary_writer.add_summary(summary, epoch)
 
-    def evaluate(self):
-        for epoche in range(int(5)):
-            bandwidth = self.data_procesor.bandwidth
-            flows = self.data_procesor.generate_flows()
-            sp = self.data_procesor.flow_to_numpy(flows)
-            paths, idx, seqs = self.data_procesor.generate_seqs(flows)
-            support_matrix = self.data_procesor.get_laplacian_matrix()
-            sp_flatten = sp.reshape([len(flows) * self.num_paths, self.num_edges])
-            fp2 = sp_flatten / np.tile(bandwidth * self.args.max_rate, [self.num_flows * self.num_paths, 1])
-            feed_dict = {
-                self.placeholders['support']: support_matrix,
-                self.placeholders['features']: fp2.T,
-                self.placeholders['paths']: paths,
-                self.placeholders['index']: idx,
-                self.placeholders['sequences']: seqs,
-            }
-            time1 = time.time()
-            outs_pd = self.sess.run(self.model.outputs, feed_dict=feed_dict)
-            time2 = time.time()
-            outs_pd= np.nanargmax(softmax(outs_pd), axis=1)
-            delay_pd = self.data_procesor.cal_delay_for_model(sp,outs_pd)
-            time3 = time.time()
-            outs_seq,delay_seq= self.data_procesor.sequential_delay_outputs(flows)
-            time4=time.time()
-            traffic = np.zeros_like(bandwidth,dtype=int)
-            label,delay_opt= self.data_procesor.generate_delay_label(sp,traffic ,bandwidth)
-            time5 = time.time()
-            print("延迟", sum(delay_pd), np.sum(delay_seq),np.sum(delay_opt))
-            print("时间",time2-time1,'\t',time4-time3,'\t',time5-time4)
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_flows",type=int, help="Number of flows process in an epoch")
-    parser.add_argument("--num_paths",type=int, help="Number of candidate paths for a flow")
-    parser.add_argument("--epoches",type=int, help="training epoches")
-    parser.add_argument("--max_rate",type=float, default=0.05,help="flow size / bandwidth")
-    parser.add_argument("--min_rate",type=float, default=0.001,help="flow size / bandwidth")
+    parser.add_argument("--num_flows", type=int, help="Number of flows process in an epoch")
+    parser.add_argument("--num_paths", type=int, help="Number of candidate paths for a flow")
+    parser.add_argument("--epochs", type=int, help="training epochs")
+    parser.add_argument("--max_rate", type=float, default=0.05, help="flow size / bandwidth")
+    parser.add_argument("--min_rate", type=float, default=0.001, help="flow size / bandwidth")
     parser.add_argument("--random_bandwidth", default=False)
-    parser.add_argument("--training_graph", default="Aarnet.graphml")
+    parser.add_argument("--graph_name", default="Aarnet.graphml")
     parser.add_argument("--learning_rate", default=0.005)
     parser.add_argument("--save", default=True)
 
     args = parser.parse_args()
-    data_procesor = DataProcessor(args)
-    trainer = Trainer(args,data_procesor)
+    data_processor = DataProcessor(args)
+    trainer = Trainer(args, data_processor)
     trainer.train()
     trainer.evaluate()

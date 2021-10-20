@@ -26,9 +26,3 @@
 # # ax2.plot(x_axis, s[1,:], color='green', label='SP selection successful number')
 # # plt.savefig('logs/comp.jpg')
 # plt.show()
-import networkx as nx
-dataset_path = "dataset/"
-graph_path = dataset_path + "Agis.graphml"
-graph = nx.read_graphml(graph_path, node_type=int)
-
-print(nx.number_of_nodes(graph))
