@@ -42,6 +42,9 @@ class Evaluate:
         self.model.load(self.sess, self.model_path)
 
     def evaluate(self):
+        # 0-opt, 1-pred, 2-seq, 3-sp
+        delay_res = np.zeros([self.epochs,4])
+        time_res = np.zeros([self.epochs,4])
         for epoch in range(self.epochs):
             bandwidth = self.data_processor.bandwidth
             flows = self.data_processor.generate_flows()
@@ -68,8 +71,14 @@ class Evaluate:
             traffic = np.zeros_like(bandwidth, dtype=int)
             label, delay_opt = self.data_processor.generate_delay_label(sp, traffic, bandwidth)
             time5 = time.time()
-            print("延迟", sum(delay_pd), np.sum(delay_seq), np.sum(delay_opt))
-            print("时间", time2 - time1, '\t', time4 - time3, '\t', time5 - time4)
+            outs_sp, delay_sp = self.data_processor.shortest_path_delay_outputs(flows)
+            time6 = time.time()
+            print("延迟", np.sum(delay_pd), np.sum(delay_seq), np.sum(delay_opt),np.sum(delay_sp))
+            print("时间", time2 - time1, '\t', time4 - time3, '\t', time5 - time4,'\t',time6-time5)
+            delay_res[epoch]=np.sum(delay_opt),np.sum(delay_pd),np.sum(delay_seq),np.sum(delay_sp)
+            time_res[epoch]=time5 - time4, time2 - time1, time4 - time3,time6-time5
+        np.save(self.args.model_path+'/delay_res.npy', delay_res)
+        np.save(self.args.model_path+'/time_res.npy', time_res)
 
     def integrated_grads(self, M=20):
         bandwidth = self.data_processor.bandwidth
@@ -102,12 +111,37 @@ class Evaluate:
             plt.figure(figsize=(4, 4))
             sns.heatmap(g / np.max(g), cbar=False, cmap='YlGnBu', vmin=0, vmax=1, )
         else:
-            sns.heatmap(g / np.max(g), cmap='YlGnBu', vmin=0, vmax=1,)
+            sns.heatmap(g / np.max(g), cmap='YlGnBu', vmin=0, vmax=1, )
 
         # plt.imshow(g)
         plt.axis("off")
         plt.savefig("visualization/test.png")
         plt.close()
+
+    def att_matrix(self):
+        bandwidth = self.data_processor.bandwidth
+        flows = self.data_processor.generate_flows()
+        sp = self.data_processor.flow_to_numpy(flows)
+        paths, idx, seqs = self.data_processor.generate_seqs(flows)
+        support_matrix = self.data_processor.get_laplacian_matrix()
+        sp_flatten = sp.reshape([len(flows) * self.num_paths, self.num_edges])
+        fp2 = sp_flatten / np.tile(bandwidth * self.args.max_rate, [self.num_flows * self.num_paths, 1])
+        features = fp2.T
+        self.feed_dict = {
+            self.placeholders['support']: support_matrix,
+            self.placeholders['features']: features,
+            self.placeholders['paths']: paths,
+            self.placeholders['index']: idx,
+            self.placeholders['sequences']: seqs,
+        }
+        print(len(self.model.layers))
+        outputs = self.sess.run(self.model.outputs,
+                                feed_dict=self.feed_dict)
+        print(outputs)
+        # att = self.sess.run(self.model.outputs,self.model.layers[-3].attention_weights)
+        # print(att)
+        return
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -124,5 +158,4 @@ if __name__ == "__main__":
     dp = DataProcessor(args)
     eva = Evaluate(args, dp)
     eva.evaluate()
-    grad = eva.integrated_grads()
-    eva.visualize(grad)
+    # eva.att_matrix()

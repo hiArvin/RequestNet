@@ -36,7 +36,8 @@ class Trainer:
         self.model = PEM(num_paths=self.num_paths, num_edges=self.num_edges, num_quests=self.num_flows,
                          placeholders=self.placeholders,
                          learning_rate=self.lr, gcn_input_dim=self.num_paths * self.num_flows,
-                         gcn_hidden_dim=16, gcn_output_dim=8, pe_output_dim=4, att_layers_num=3)
+                         gcn_hidden_dim=16, gcn_output_dim=8, pe_output_dim=4, att_layers_num=3
+                         )
         # tf config
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -45,9 +46,9 @@ class Trainer:
         if self.save:
             self.merged = tf.summary.merge_all()
             self.save_path = './logs/' + datetime.now().strftime('%m%d-%H%M')
-            graph_name = self.args.graph_name.split('-')[0]
-            graph_name = graph_name.split('.')[0]
-            self.save_path += '-' + graph_name + '-Q' + str(self.num_flows) + '-P' + str(self.num_paths)
+            graph_name = self.args.graph_name.split('.')[0]
+            # graph_name = self.args.graph_name.split('-')[0]
+            self.save_path += '-' + graph_name + '-F' + str(self.num_flows) + '-P' + str(self.num_paths)
             self.summary_writer = tf.summary.FileWriter(self.save_path, graph=self.sess.graph)
 
         # Init variables
@@ -112,7 +113,7 @@ if __name__ == "__main__":
     parser.add_argument("--min_rate", type=float, default=0.001, help="flow size / bandwidth")
     parser.add_argument("--random_bandwidth", default=False)
     parser.add_argument("--graph_name", default="Aarnet.graphml")
-    parser.add_argument("--learning_rate", default=0.005)
+    parser.add_argument("--learning_rate",type=float, default=0.005)
     parser.add_argument("--save", default=True)
 
     args = parser.parse_args()

@@ -287,7 +287,8 @@ class PathEmbedding(Layer):
         # reshape into path embedding
         path_state = tf.reshape(context, [self.num_quests, self.num_paths * self.path_state_dim])
         path_state = tf.keras.layers.Softmax()(path_state)
-
+        # for multi-head attention
+        # path_state = tf.expand_dims(path_state, 0)
         return path_state
 
 class BatchTransform(Layer):
@@ -329,10 +330,25 @@ class Attention(Layer):
         context = tf.matmul(value, self.att)
         return context
 
+class Residual(Layer):
+    def __init__(self,d_model,num_heads,num_mh,**kwargs):
+        super(Residual,self).__init__(**kwargs)
+        self.layers = []
+        for layer in range(num_mh):
+            self.layers.append(MultiHeadAttention(d_model=d_model,num_heads=num_heads))
 
-class MultiHeadAttention(tf.keras.layers.Layer):
-    def __init__(self, d_model, num_heads):
-        super(MultiHeadAttention, self).__init__()
+
+    def _call(self,inputs):
+        x= inputs
+        for layer in self.layers:
+            x = layer(x)
+        output= tf.keras.layers.add([inputs, x])
+        return output
+
+
+class MultiHeadAttention(Layer):
+    def __init__(self, d_model, num_heads,**kwargs):
+        super(MultiHeadAttention, self).__init__(**kwargs)
         self.num_heads = num_heads
         self.d_model = d_model
 
@@ -345,6 +361,8 @@ class MultiHeadAttention(tf.keras.layers.Layer):
             self.wv = tf.keras.layers.Dense(d_model)
 
             self.dense = tf.keras.layers.Dense(d_model)
+
+        # self.attention_weights = None
 
     def split_heads(self, x, batch_size):
         """分拆最后一个维度到 (num_heads, depth).
@@ -390,8 +408,8 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         return output, attention_weights
 
     def _call(self, inputs, mask=None):
-        # to reuse the code
         inputs = tf.expand_dims(inputs, 0)
+        # to reuse the code
         batch_size = 1
 
         q = self.wq(inputs)  # (batch_size, seq_len, d_model)
@@ -404,8 +422,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         # scaled_attention.shape == (batch_size, num_heads, seq_len_q, depth)
         # attention_weights.shape == (batch_size, num_heads, seq_len_q, seq_len_k)
-        scaled_attention, attention_weights = self.scaled_dot_product_attention(
-            q, k, v, mask)
+        scaled_attention, self.attention_weights = self.scaled_dot_product_attention(q, k, v, mask)
 
         scaled_attention = tf.transpose(scaled_attention,
                                         perm=[0, 2, 1, 3])  # (batch_size, seq_len_q, num_heads, depth)
@@ -413,9 +430,10 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         concat_attention = tf.reshape(scaled_attention,
                                       (batch_size, -1, self.d_model))  # (batch_size, seq_len_q, d_model)
 
-        output = self.dense(concat_attention)  # (batch_size, seq_len_q, d_model)
+        outputs = self.dense(concat_attention)  # (batch_size, seq_len_q, d_model)
+        outputs = tf.squeeze(outputs)
 
-        return output
+        return outputs
 
 
 class Readout(Layer):
@@ -426,5 +444,6 @@ class Readout(Layer):
         self.b0 = tf.zeros(output_dim)
 
     def _call(self, inputs):
+        inputs = tf.squeeze(inputs)
         o = tf.matmul(inputs, self.w0) + self.b0
         return self.act(o)

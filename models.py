@@ -188,9 +188,12 @@ class PEM(Model):
 
         # self.layers.append(Attention(num_paths=self.pe_output_dim*self.num_paths,
         #                              num_quests=self.num_quests))
+        # self.layers.append(Residual(d_model=self.pe_output_dim * self.num_paths,
+        #                             num_heads=self.num_paths,
+        #                             num_mh=self.att_layers_num))
         for l in range(self.att_layers_num):
-            self.layers.append(
-                MultiHeadAttention(d_model=self.pe_output_dim * self.num_paths, num_heads=self.num_paths))
+            # self.layers.append(MultiHeadAttention(d_model=self.pe_output_dim * self.num_paths,
+            #                                       num_heads=self.num_paths))
             self.layers.append(tf.keras.layers.Dense(self.pe_output_dim * self.num_paths))
 
         self.layers.append(tf.keras.layers.Dense(self.num_paths))
@@ -198,8 +201,8 @@ class PEM(Model):
         #                            output_dim=self.num_paths))
 
     def _loss(self):
-        l = tf.nn.softmax_cross_entropy_with_logits_v2(logits=self.outputs, labels=self.placeholders['labels'], axis=1)
-        loss = tf.reduce_mean(l)  # modify here
+        l = tf.nn.softmax_cross_entropy_with_logits_v2(logits=tf.squeeze(self.outputs), labels=self.placeholders['labels'],axis=1)
+        loss = tf.reduce_sum(l)  # modify here
         # l2 normalize
         # loss+= tf.nn.l2_loss(self.vars)
         tf.summary.scalar("loss", loss)

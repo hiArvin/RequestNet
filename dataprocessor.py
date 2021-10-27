@@ -20,13 +20,19 @@ class DataProcessor:
         else:
             self.node_graph = self.get_topozoo_graph(args.graph_name)
             self.generate_flows = self.generate_topozoo_flows
+        for src,dst in nx.edges(self.node_graph):
+            # print(src,dst)
+            self.node_graph[src][dst]['weight']=1
         self.num_nodes = nx.number_of_nodes(self.node_graph)
         self.num_edges = nx.number_of_edges(self.node_graph)
 
         self.edge_graph = self.nodeGraph_2_edgeGraph()
 
         self.init_bandwidth()
-        self.shortest_paths = self.gen_paths()
+        if self.num_nodes < 30:
+            self.shortest_paths = self.gen_paths()
+        else:
+            self.shortest_paths = {}
 
     def get_ZTE_graph(self, graph_name):
         cfg = graph_name.split('-')
@@ -40,7 +46,7 @@ class DataProcessor:
     def get_topozoo_graph(self, graph_name):
         dataset_path = "dataset/"
         graph_path = dataset_path + graph_name
-        graph = nx.read_graphml(graph_path, node_type=int)
+        graph = nx.read_graphml(graph_path, node_type=int,force_multigraph=True)
         return graph
 
     def nodeGraph_2_edgeGraph(self):
@@ -85,12 +91,26 @@ class DataProcessor:
             for dst in range(self.num_nodes):
                 if src == dst:
                     continue
-                k_sp = k_shortest_paths(self.node_graph, source=src, target=dst, k=self.num_paths)
+                k_sp, k_len = k_shortest_paths(self.node_graph, source=src, target=dst, k=self.num_paths)
                 for i in range(self.num_paths - len(k_sp)):
                     k_sp.append(k_sp[0])
                 random.shuffle(k_sp)
                 shortest_path[src][dst] = k_sp
         return shortest_path
+
+    def gen_s_d_paths(self,src,dst,num_paths):
+        k_sp,k_len = k_shortest_paths(self.node_graph, source=src, target=dst, k=num_paths)
+        for i in range(num_paths - len(k_sp)):
+            k_sp.append(k_sp[0])
+        random.shuffle(k_sp)
+        tmp = {dst: k_sp}
+        if src in self.shortest_paths:
+            self.shortest_paths[src].update(tmp)
+        else:
+            self.shortest_paths[src]= tmp
+        # print(k_sp)
+        return k_sp
+
 
     def zte_flow_generator(self):
         source_nodes = []
@@ -151,9 +171,13 @@ class DataProcessor:
         edges = pd.DataFrame(nx.edges(self.node_graph, nbunch=None), columns=['src', 'dst'])
         for f in range(len(flows)):
             src, dst, flow_size = flows[f]
+            if src in self.shortest_paths and dst in self.shortest_paths[src]:
+                shortest_paths = self.shortest_paths[src][dst]
+            else:
+                shortest_paths = self.gen_s_d_paths(src,dst,self.num_paths)
             for p in range(self.num_paths):
                 # print(src,dst,p)
-                simple_path = self.shortest_paths[src][dst][p]
+                simple_path = shortest_paths[p]
                 for i in range(len(simple_path) - 1):
                     idx = edges[((edges.src == simple_path[i]) & (edges.dst == simple_path[i + 1])) |
                                 ((edges.dst == simple_path[i]) & (edges.src == simple_path[i + 1]))].index[0]
@@ -201,6 +225,7 @@ class DataProcessor:
         outs = np.eye(self.num_paths, dtype=int)[outs]
         traffic = np.sum(np.multiply(np.expand_dims(outs, -1).repeat(self.num_edges, -1), sp), axis=1)
         traffic = np.sum(traffic, axis=0)
+        # print(traffic.shape)
         delay = cal_total_delay(traffic, self.bandwidth)
         return delay
 
@@ -217,6 +242,34 @@ class DataProcessor:
             outputs[i] = res
             traffic = traffic + sp[0][res]
         return outputs, delay
+        ## 自己写的版本，速度好像更慢了。。。
+        # delay_p = np.zeros([self.num_paths,self.num_edges])
+        # tfc = np.zeros([self.num_paths,self.num_edges])
+        # for i in range(self.num_flows):
+        #     for p in range(self.num_paths):
+        #         flow = flows[i]
+        #         sp = self.flow_to_numpy([flow])[0]
+        #         tfc[p] = traffic+sp[p]
+        #         delay_p[p] = cal_total_delay(np.squeeze(tfc[p]),bandwidth)
+        #     delay_sum = np.nansum(delay_p,axis=1)
+        #     chosen = np.nanargmax(delay_sum)
+        #     outputs[i] = chosen
+        #     traffic = tfc[chosen]
+        # total_delay = delay_p[outputs[-1]]
+        # return outputs, total_delay
+
+    def shortest_path_delay_outputs(self, flows):
+        bandwidth = self.bandwidth
+        traffic = np.zeros_like(bandwidth)
+        outputs = np.zeros(len(flows), dtype=int)
+        for i in range(len(flows)):
+            sp = self.flow_to_numpy([flows[i]])[0]
+            chosen = np.nanargmax(np.nansum(sp,axis=-1))
+            outputs[i] = chosen
+            traffic += sp[chosen]
+        delay = cal_total_delay(traffic, bandwidth)
+        return outputs, delay
+
 
 
 if __name__ == "__main__":

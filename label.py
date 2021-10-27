@@ -10,7 +10,7 @@ from utils import k_shortest_paths
 
 
 def solve_slice(num_edges, num_flows, num_paths, sp, capacity):
-    with gb.Env(empty=True) as env:
+    with gb.Env(empty=False) as env:
         env.setParam('OutputFlag', 0)
         env.start()
         with gb.Model(env=env) as model:
