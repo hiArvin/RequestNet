@@ -92,7 +92,7 @@ class Topology:
                 self.graph.nodes[n]['layer'] = 'core layer'
                 self.graph.nodes[n]['ring_num'] = self.graph.nodes[n]['IGP_num']
 
-    def gen_flows(self, size_percent: float(0-1.0) = 0.1):
+    def gen_flows(self, max_rate=0.1, min_rate=0.01):
         source_nodes = []
         dest_nodes = list(self.graph.nodes)
         for node in self.graph.nodes:
@@ -102,7 +102,7 @@ class Topology:
             s = int(np.random.choice(source_nodes, 1))
             d = int(np.random.choice(dest_nodes, 1))
             if self._helper_vail_s_d(s, d):
-                yield [s, d, int(np.random.uniform(0.0e1 * self.access_band, size_percent * self.access_band))]
+                yield [s, d, int(np.random.uniform(min_rate * self.access_band, max_rate * self.access_band))]
 
     def _helper_vail_s_d(self, s, d):
         s = self.graph.nodes[s]

@@ -1,5 +1,6 @@
 from utils import *
 import random
+import time
 from iteration_utilities import deepflatten
 from label import delay_solver, solver
 from topology import Topology
@@ -15,7 +16,7 @@ class DataProcessor:
         self.min_rate = args.min_rate
 
         if 'ZTE' in args.graph_name:
-            self.node_graph = self.get_ZTE_graph(args.graph_name)
+            self.node_graph,self.topo = self.get_ZTE_graph(args.graph_name)
             self.generate_flows = self.generate_ZTE_flows
         else:
             self.node_graph = self.get_topozoo_graph(args.graph_name)
@@ -41,12 +42,14 @@ class DataProcessor:
             _, num_core, num_converge, num_access = cfg
             num_core, num_converge, num_access = int(num_core), int(num_converge), int(num_access)
         topo = Topology(num_core=num_core, num_converge=num_converge, num_access=num_access)
-        return topo.graph
+        return topo.graph, topo
 
     def get_topozoo_graph(self, graph_name):
         dataset_path = "dataset/"
         graph_path = dataset_path + graph_name
         graph = nx.read_graphml(graph_path, node_type=int,force_multigraph=True)
+        graph = nx.Graph(graph)
+        # print(graph.edges)
         return graph
 
     def nodeGraph_2_edgeGraph(self):
@@ -77,7 +80,11 @@ class DataProcessor:
         return sup
 
     def init_bandwidth(self):
-        if not self.random_bandwidth:
+        if 'ZTE' in self.args.graph_name:
+            bandwidth = np.zeros(self.num_edges)
+            for i, edge in enumerate(self.topo.graph.edges.data()):
+                bandwidth[i]=edge[2]['bandwidth']
+        elif not self.random_bandwidth:
             bandwidth = np.ones(self.num_edges) * 10000
         else:
             bandwidth = np.random.randint(1, 10, self.num_edges) * 10000
@@ -111,43 +118,9 @@ class DataProcessor:
         # print(k_sp)
         return k_sp
 
-
-    def zte_flow_generator(self):
-        source_nodes = []
-        dest_nodes = list(self.node_graph.nodes)
-        for node in self.node_graph.nodes:
-            if self.node_graph.nodes[node]['layer'] == 'access layer':
-                source_nodes.append(node)
-        while True:
-            s = int(np.random.choice(source_nodes, 1))
-            d = int(np.random.choice(dest_nodes, 1))
-            if self._helper_vail_s_d(s, d):
-                yield [s, d,
-                       int(np.random.uniform(self.min_rate * self.bandwidth[0], self.max_rate * self.bandwidth[0]))]
-
-    def _helper_vail_s_d(self, s, d):
-        s = self.node_graph.nodes[s]
-        d = self.node_graph.nodes[d]
-        if d['layer'] == 'core layer' or d['layer'] == 'metro cross':
-            return True
-        elif d['layer'] == 'converge layer':
-            if s['IGP_num'] != d['IGP_num']:
-                return True
-            elif d['ring_num'] == s['CONV_num']:
-                return False
-        else:
-            if s['IGP_num'] != d['IGP_num']:
-                return True
-            elif s['CONV_num'] != d['CONV_num']:
-                return True
-            elif s['ring_num'] != d['ring_num']:
-                return True
-            else:
-                return False
-
     def generate_ZTE_flows(self):
         flows = []
-        flow_generator = self.zte_flow_generator()
+        flow_generator = self.topo.gen_flows(self.max_rate,self.min_rate)
         for i in range(self.num_flows):
             flows.append(next(flow_generator))
         return flows
@@ -233,15 +206,19 @@ class DataProcessor:
         bandwidth = self.bandwidth
         traffic = np.zeros_like(bandwidth)
         outputs = np.zeros(len(flows), dtype=int)
+        process_time =0
         delay = None
         for i in range(self.num_flows):
             flow = flows[i]
             sp = self.flow_to_numpy([flow])
+            time_start = time.time()
             label, delay = delay_solver(self.num_edges, 1, self.num_paths, sp, traffic, self.bandwidth)
+            time_end = time.time()
+            process_time += (time_end-time_start)
             res = np.argmax(label[0])
             outputs[i] = res
             traffic = traffic + sp[0][res]
-        return outputs, delay
+        return outputs, delay ,process_time
         ## 自己写的版本，速度好像更慢了。。。
         # delay_p = np.zeros([self.num_paths,self.num_edges])
         # tfc = np.zeros([self.num_paths,self.num_edges])
@@ -285,17 +262,24 @@ if __name__ == "__main__":
 
     args = Args()
     dp = DataProcessor(args)
-    flows = dp.generate_flows()
-    print(flows)
-    outs_seq, delay_seq = dp.sequential_delay_outputs(flows)
-    sp_numpy = dp.flow_to_numpy(flows)
-    traffic = np.zeros_like(dp.bandwidth)
-    outs_gb, delay_gb = dp.generate_delay_label(sp_numpy, traffic, dp.bandwidth)
-    print(outs_seq)
-    print(np.argmax(outs_gb, axis=1))
-    print(delay_gb)
-    print(delay_seq)
-    print(sum(delay_seq) - sum(delay_gb))
-    outs = np.array([1, 2, 1, 2, 1, 2, 1, 2, 1, 2])
-    delay_pd = dp.cal_delay_for_model(sp_numpy, outs)
-    print(delay_pd)
+    print(dp.bandwidth)
+    # bandwidth = np.zeros(dp.num_edges)
+    # count=0
+    # for i,edge in enumerate(dp.topo.graph.edges.data()):
+    #     # print(edge[2]['bandwidth'])
+    #     bandwidth[i]=edge[2]['bandwidth']
+    # print(dp.topo.graph.edges(data=True))
+    # flows = dp.generate_flows()
+    # print(flows)
+    # outs_seq, delay_seq = dp.sequential_delay_outputs(flows)
+    # sp_numpy = dp.flow_to_numpy(flows)
+    # traffic = np.zeros_like(dp.bandwidth)
+    # outs_gb, delay_gb = dp.generate_delay_label(sp_numpy, traffic, dp.bandwidth)
+    # print(outs_seq)
+    # print(np.argmax(outs_gb, axis=1))
+    # print(delay_gb)
+    # print(delay_seq)
+    # print(sum(delay_seq) - sum(delay_gb))
+    # outs = np.array([1, 2, 1, 2, 1, 2, 1, 2, 1, 2])
+    # delay_pd = dp.cal_delay_for_model(sp_numpy, outs)
+    # print(delay_pd)

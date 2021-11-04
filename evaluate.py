@@ -48,6 +48,7 @@ class Evaluate:
         for epoch in range(self.epochs):
             bandwidth = self.data_processor.bandwidth
             flows = self.data_processor.generate_flows()
+
             sp = self.data_processor.flow_to_numpy(flows)
             paths, idx, seqs = self.data_processor.generate_seqs(flows)
             support_matrix = self.data_processor.get_laplacian_matrix()
@@ -65,18 +66,17 @@ class Evaluate:
             time2 = time.time()
             outs_pd = np.nanargmax(softmax(outs_pd), axis=1)
             delay_pd = self.data_processor.cal_delay_for_model(sp, outs_pd)
-            time3 = time.time()
-            outs_seq, delay_seq = self.data_processor.sequential_delay_outputs(flows)
-            time4 = time.time()
+            outs_seq, delay_seq, seq_time= self.data_processor.sequential_delay_outputs(flows)
             traffic = np.zeros_like(bandwidth, dtype=int)
+            time4 =time.time()
             label, delay_opt = self.data_processor.generate_delay_label(sp, traffic, bandwidth)
             time5 = time.time()
             outs_sp, delay_sp = self.data_processor.shortest_path_delay_outputs(flows)
             time6 = time.time()
             print("延迟", np.sum(delay_pd), np.sum(delay_seq), np.sum(delay_opt),np.sum(delay_sp))
-            print("时间", time2 - time1, '\t', time4 - time3, '\t', time5 - time4,'\t',time6-time5)
+            print("时间", time2 - time1, '\t', seq_time, '\t', time5 - time4,'\t',time6-time5)
             delay_res[epoch]=np.sum(delay_opt),np.sum(delay_pd),np.sum(delay_seq),np.sum(delay_sp)
-            time_res[epoch]=time5 - time4, time2 - time1, time4 - time3,time6-time5
+            time_res[epoch]=time5 - time4, time2 - time1, seq_time,time6-time5
         np.save(self.args.model_path+'/delay_res.npy', delay_res)
         np.save(self.args.model_path+'/time_res.npy', time_res)
 
@@ -84,6 +84,13 @@ class Evaluate:
         bandwidth = self.data_processor.bandwidth
         flows = self.data_processor.generate_flows()
         sp = self.data_processor.flow_to_numpy(flows)
+        ###
+        mask = sp != 0
+        mask=np.reshape(mask,[self.num_flows*self.num_paths,self.num_edges])
+        print(sp)
+        # mask = np.squeeze(mask)
+        print(np.sum(mask, axis=0))
+        ###
         paths, idx, seqs = self.data_processor.generate_seqs(flows)
         support_matrix = self.data_processor.get_laplacian_matrix()
         sp_flatten = sp.reshape([len(flows) * self.num_paths, self.num_edges])
@@ -113,10 +120,12 @@ class Evaluate:
         else:
             sns.heatmap(g / np.max(g), cmap='YlGnBu', vmin=0, vmax=1, )
 
-        # plt.imshow(g)
+        plt.imshow(g)
         plt.axis("off")
         plt.savefig("visualization/test.png")
         plt.close()
+
+
 
     def att_matrix(self):
         bandwidth = self.data_processor.bandwidth

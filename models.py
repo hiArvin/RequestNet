@@ -202,7 +202,7 @@ class PEM(Model):
 
     def _loss(self):
         l = tf.nn.softmax_cross_entropy_with_logits_v2(logits=tf.squeeze(self.outputs), labels=self.placeholders['labels'],axis=1)
-        loss = tf.reduce_sum(l)  # modify here
+        loss = tf.reduce_mean(l)  # modify here
         # l2 normalize
         # loss+= tf.nn.l2_loss(self.vars)
         tf.summary.scalar("loss", loss)

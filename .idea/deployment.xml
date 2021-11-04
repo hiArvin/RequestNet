@@ -16,6 +16,13 @@
           </mappings>
         </serverdata>
       </paths>
+      <paths name="holan@a534.ink19.cn:22 password (1)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/holan/RequestNet" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
     </serverData>
     <option name="myAutoUpload" value="ALWAYS" />
   </component>

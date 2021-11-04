@@ -266,13 +266,20 @@ class PathEmbedding(Layer):
                                                       link_inputs,
                                                       sequence_length=lens,
                                                       dtype=tf.float32)
+        ###
+        # # 这里是不加attention的部分
+        # last_state = tf.reshape(last_state, [self.num_quests, self.num_paths * self.path_state_dim])
+        # last_state = tf.keras.layers.Softmax()(last_state)
+        # return last_state
+        ###
+
         key = tf.matmul(hidden_states, self.wk)
         query = tf.matmul(last_state, self.wq)
         value = tf.matmul(hidden_states, self.wv)
         self.att = tf.matmul(key, tf.expand_dims(query, -1))
         self.att = tf.transpose(self.att, [0, 2, 1])
         context = tf.matmul(self.att, value)
-        context = tf.squeeze(context)
+        # context = tf.squeeze(context)
         # self.att = tf.matmul(tf.transpose(hidden_states,[0,2,1]),state)
         # context = tf.matmul(tf.transpose(self.att, [0, 2, 1]), state)
         # another model:
@@ -287,8 +294,6 @@ class PathEmbedding(Layer):
         # reshape into path embedding
         path_state = tf.reshape(context, [self.num_quests, self.num_paths * self.path_state_dim])
         path_state = tf.keras.layers.Softmax()(path_state)
-        # for multi-head attention
-        # path_state = tf.expand_dims(path_state, 0)
         return path_state
 
 class BatchTransform(Layer):
@@ -332,6 +337,8 @@ class Attention(Layer):
 
 class Residual(Layer):
     def __init__(self,d_model,num_heads,num_mh,**kwargs):
+        self.d_model = d_model
+        self.num_heads = num_heads
         super(Residual,self).__init__(**kwargs)
         self.layers = []
         for layer in range(num_mh):
@@ -339,10 +346,14 @@ class Residual(Layer):
 
 
     def _call(self,inputs):
+        shape = tf.shape(inputs)
+        inputs = tf.expand_dims(inputs,0)
         x= inputs
         for layer in self.layers:
             x = layer(x)
-        output= tf.keras.layers.add([inputs, x])
+        output = inputs+x
+        output = tf.reshape(shape)
+        # output = tf.squeeze(output)
         return output
 
 
@@ -408,7 +419,7 @@ class MultiHeadAttention(Layer):
         return output, attention_weights
 
     def _call(self, inputs, mask=None):
-        inputs = tf.expand_dims(inputs, 0)
+        # inputs = tf.expand_dims(inputs, 0)
         # to reuse the code
         batch_size = 1
 
@@ -431,7 +442,7 @@ class MultiHeadAttention(Layer):
                                       (batch_size, -1, self.d_model))  # (batch_size, seq_len_q, d_model)
 
         outputs = self.dense(concat_attention)  # (batch_size, seq_len_q, d_model)
-        outputs = tf.squeeze(outputs)
+        # outputs = tf.squeeze(outputs)
 
         return outputs
 
@@ -444,6 +455,6 @@ class Readout(Layer):
         self.b0 = tf.zeros(output_dim)
 
     def _call(self, inputs):
-        inputs = tf.squeeze(inputs)
+        # inputs = tf.squeeze(inputs)
         o = tf.matmul(inputs, self.w0) + self.b0
         return self.act(o)

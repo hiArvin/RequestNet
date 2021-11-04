@@ -50,6 +50,9 @@ class Trainer:
             # graph_name = self.args.graph_name.split('-')[0]
             self.save_path += '-' + graph_name + '-F' + str(self.num_flows) + '-P' + str(self.num_paths)
             self.summary_writer = tf.summary.FileWriter(self.save_path, graph=self.sess.graph)
+            args_file = self.save_path+'/args.txt'
+            with open(args_file,'w') as f:
+                f.write(str(args))
 
         # Init variables
         self.sess.run(tf.global_variables_initializer())
