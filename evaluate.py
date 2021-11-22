@@ -17,13 +17,15 @@ class Evaluate:
         self.num_paths = args.num_paths
         self.epochs = args.epochs
         self.model_path = args.model_path
+        #
+        self.model_flows = args.model_flows
 
         self.data_processor = data_processor
         self.num_edges = data_processor.num_edges
         self.placeholders = {
             'support': tf.placeholder(tf.float32, shape=(self.num_edges, self.num_edges)),
             'features': tf.placeholder(tf.float32),
-            'labels': tf.placeholder(tf.int64, shape=(self.num_flows, self.num_paths)),
+            'labels': tf.placeholder(tf.int64, shape=(self.model_flows, self.num_paths)),
             'dropout': tf.placeholder_with_default(0., shape=()),
             'paths': tf.placeholder(tf.int64),
             'index': tf.placeholder(tf.int64),
@@ -31,9 +33,9 @@ class Evaluate:
         }
         self.model = PEM(num_paths=self.num_paths,
                          num_edges=self.num_edges,
-                         num_quests=self.num_flows,
+                         num_quests=self.model_flows,
                          placeholders=self.placeholders,
-                         gcn_input_dim=self.num_paths * self.num_flows,
+                         gcn_input_dim=self.num_paths * self.model_flows,
                          gcn_hidden_dim=16,
                          gcn_output_dim=8,
                          pe_output_dim=4,
@@ -50,21 +52,30 @@ class Evaluate:
             flows = self.data_processor.generate_flows()
 
             sp = self.data_processor.flow_to_numpy(flows)
-            paths, idx, seqs = self.data_processor.generate_seqs(flows)
+
             support_matrix = self.data_processor.get_laplacian_matrix()
             sp_flatten = sp.reshape([len(flows) * self.num_paths, self.num_edges])
-            fp2 = sp_flatten / np.tile(bandwidth * self.args.max_rate, [self.num_flows * self.num_paths, 1])
-            feed_dict = {
-                self.placeholders['support']: support_matrix,
-                self.placeholders['features']: fp2.T,
-                self.placeholders['paths']: paths,
-                self.placeholders['index']: idx,
-                self.placeholders['sequences']: seqs,
-            }
-            time1 = time.time()
-            outs_pd = self.sess.run(self.model.outputs, feed_dict=feed_dict)
+            time_pred = 0
+            outs_pd = np.zeros(self.num_flows,dtype=int)
+            for i in range(self.num_flows//self.model_flows):
+                paths, idx, seqs = self.data_processor.generate_seqs(flows[i*self.model_flows:(i+1)*self.model_flows])
+                sp_short = sp_flatten[i*self.num_paths*self.model_flows:(i+1)*self.num_paths*self.model_flows,:]
+                fp2 = sp_short / np.tile(bandwidth * self.args.max_rate, [self.model_flows * self.num_paths, 1])
+                feed_dict = {
+                    self.placeholders['support']: support_matrix,
+                    self.placeholders['features']: fp2.T,
+                    self.placeholders['paths']: paths,
+                    self.placeholders['index']: idx,
+                    self.placeholders['sequences']: seqs,
+                }
+                time_start = time.time()
+                out_pd = self.sess.run(self.model.outputs, feed_dict=feed_dict)
+                time_end = time.time()
+                time_pred += time_end - time_start
+                out_pd = np.nanargmax(softmax(out_pd), axis=1)
+                outs_pd[i*self.model_flows:(i+1)*self.model_flows] = out_pd
             time2 = time.time()
-            outs_pd = np.nanargmax(softmax(outs_pd), axis=1)
+            # outs_pd = np.nanargmax(softmax(outs_pd), axis=1)
             delay_pd = self.data_processor.cal_delay_for_model(sp, outs_pd)
             outs_seq, delay_seq, seq_time= self.data_processor.sequential_delay_outputs(flows)
             traffic = np.zeros_like(bandwidth, dtype=int)
@@ -74,9 +85,9 @@ class Evaluate:
             outs_sp, delay_sp = self.data_processor.shortest_path_delay_outputs(flows)
             time6 = time.time()
             print("延迟", np.sum(delay_pd), np.sum(delay_seq), np.sum(delay_opt),np.sum(delay_sp))
-            print("时间", time2 - time1, '\t', seq_time, '\t', time5 - time4,'\t',time6-time5)
+            print("时间", time_pred, '\t', seq_time, '\t', time5 - time4,'\t',time6-time5)
             delay_res[epoch]=np.sum(delay_opt),np.sum(delay_pd),np.sum(delay_seq),np.sum(delay_sp)
-            time_res[epoch]=time5 - time4, time2 - time1, seq_time,time6-time5
+            time_res[epoch]=time5 - time4, time_pred, seq_time,time6-time5
         np.save(self.args.model_path+'/delay_res.npy', delay_res)
         np.save(self.args.model_path+'/time_res.npy', time_res)
 
@@ -125,8 +136,6 @@ class Evaluate:
         plt.savefig("visualization/test.png")
         plt.close()
 
-
-
     def att_matrix(self):
         bandwidth = self.data_processor.bandwidth
         flows = self.data_processor.generate_flows()
@@ -158,10 +167,12 @@ if __name__ == "__main__":
     parser.add_argument("--num_paths", type=int, help="Number of candidate paths for a flow")
     parser.add_argument("--epochs", type=int, help="Evaluation epochs")
     parser.add_argument("--model_path", help="Path of trained model")
+    parser.add_argument("--model_flows",type=int)
     parser.add_argument("--max_rate", type=float, default=0.05, help="flow size / bandwidth")
     parser.add_argument("--min_rate", type=float, default=0.001, help="flow size / bandwidth")
     parser.add_argument("--random_bandwidth", default=False)
     parser.add_argument("--graph_name", default="Aarnet.graphml")
+
 
     args = parser.parse_args()
     dp = DataProcessor(args)

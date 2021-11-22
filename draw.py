@@ -7,9 +7,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 # 0-opt, 1-pred, 2-seq, 3-sp
-time_res = np.load('logs/1104-1503-Arpanet19728-F20-P5/time_res.npy')
-print(time_res)
-d = np.load('logs/1104-1503-Arpanet19728-F20-P5/delay_res.npy')
+
+dir_name = '1109-1523-Deltacom-F50-P5'
+
+time_res = np.load('logs/'+dir_name+'/time_res.npy')
+print(np.average(time_res,axis=0))
+d = np.load('logs/'+dir_name+'/delay_res.npy')
+print(d)
 # data_df = pd.DataFrame(d.T)
 # print(data_df)
 # writer = pd.ExcelWriter('logs/test.xlsx')  #关键2，创建名称为hhh的excel表格
@@ -26,6 +30,7 @@ plt.figure()
 plt.title('Delay Ratio')
 
 plt.bar(x,d,color=['r','g','b','c'])
+plt.ylim((0.8,2))
 plt.show()
 
 # x_axis = list(range(d.shape[1]))

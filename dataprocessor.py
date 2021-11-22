@@ -133,9 +133,11 @@ class DataProcessor:
             nodes = list(self.node_graph.nodes)
             s, d = random.sample(nodes, 2)
             flow_size = np.random.randint(self.min_rate * self.bandwidth, self.max_rate * self.bandwidth, 1)
-            if nx.shortest_path_length(self.node_graph, s, d) >= 5:
-                flows.append([s, d, int(flow_size)])
-                count += 1
+            flows.append([s, d, int(flow_size)])
+            count += 1
+            # if nx.shortest_path_length(self.node_graph, s, d) >= 3:
+            #     flows.append([s, d, int(flow_size)])
+            #     count += 1
         return flows
 
     def flow_to_numpy(self, flows):

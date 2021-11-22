@@ -71,11 +71,12 @@ class Trainer:
         sp_flatten = sp.reshape([len(flows) * self.num_paths, self.num_edges])
         # normalization
         mask = sp_flatten != 0
-        feature = sp_flatten - mask * bandwidth * self.args.min_rate
-        # print(feature)
-        # print(mask * bandwidth * self.args.min_rate)
-        feature = feature / (
-                    np.ones_like(sp_flatten) * (bandwidth[0] * self.args.max_rate - bandwidth[0] * self.args.min_rate))
+        # 用最大最小的流来拉平特征
+        # feature = sp_flatten - mask * bandwidth * self.args.min_rate
+        # feature = feature / (
+        #             np.ones_like(sp_flatten) * (bandwidth[0] * self.args.max_rate - bandwidth[0] * self.args.min_rate))
+        # 用带宽来拉平特征
+        feature = sp_flatten/(np.ones_like(sp_flatten)*bandwidth[0])
         # print(feature)
         # Construct feed dictionary
         feed_dict = construct_feed_dict(feature.T, support_matrix, labels, paths, idx, seqs, self.placeholders)
