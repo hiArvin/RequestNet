@@ -291,10 +291,53 @@ class PathEmbedding(Layer):
         # # context = tf.keras.layers.Dense(self.path_state_dim)(conv2)
         # context = tf.keras.layers.LSTM(self.path_state_dim)(link_inputs,mask=lens)
 
-        # reshape into path embedding
-        path_state = tf.reshape(context, [self.num_quests, self.num_paths * self.path_state_dim])
-        path_state = tf.keras.layers.Softmax()(path_state)
-        return path_state
+        # # reshape into path embedding
+        # path_state = tf.reshape(context, [self.num_quests, self.num_paths * self.path_state_dim])
+        # path_state = tf.keras.layers.Softmax()(path_state)
+        return context
+
+class FlowEmbedding(Layer):
+    def __init__(self,num_quests, num_paths, path_state_dim,**kwargs):
+        super(FlowEmbedding, self).__init__(**kwargs)
+        self.num_quests = num_quests
+        self.num_paths = num_paths
+        self.path_state_dim = path_state_dim
+
+    def _call(self,inputs):
+        flow_state = tf.reshape(inputs, [self.num_quests, self.num_paths * self.path_state_dim])
+        flow_state = tf.keras.layers.Softmax()(flow_state)
+        return flow_state
+
+class FlowPointer(Layer):
+    def __init__(self,num_quests, num_paths, path_state_dim,**kwargs):
+        super(FlowPointer, self).__init__(**kwargs)
+        self.num_quests = num_quests
+        self.num_paths = num_paths
+        self.path_state_dim = path_state_dim
+
+        # Trainable parameters
+        with tf.name_scope('Attention'):
+            self.wq = glorot([path_state_dim, path_state_dim], name='attention_q')
+            self.wk = glorot([path_state_dim, path_state_dim], name='attention_k')
+            self.wv = glorot([path_state_dim, path_state_dim], name='attention_v')
+            self.RNN = tf.keras.layers.SimpleRNN(path_state_dim,return_sequences=True, return_state=True)
+
+    def _call(self,inputs):
+        path_state = tf.reshape(inputs, [self.num_quests, self.num_paths, self.path_state_dim])
+        hidden_state,flow_state = self.RNN(path_state)
+
+        key = tf.matmul(hidden_state, self.wk)
+        query = tf.matmul(flow_state, self.wq)
+        value = tf.matmul(hidden_state, self.wv)  # [T,D]
+        self.att = tf.matmul(key, tf.expand_dims(query, -1))
+        self.att = tf.squeeze(self.att)
+        # self.att = tf.transpose(self.att, [0, 2, 1])
+        context = tf.matmul(self.att, value)
+        # context = tf.squeeze(context)
+
+        return self.att
+
+
 
 class BatchTransform(Layer):
     def __init__(self,batch_size):

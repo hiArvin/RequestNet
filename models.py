@@ -137,18 +137,23 @@ class PEM(Model):
                                          path_state_dim=self.pe_output_dim,
                                          placeholders=self.placeholders,
                                          act=tf.nn.relu))
-
+        # self.layers.append(FlowEmbedding(num_quests=self.num_quests,
+        #                                  num_paths=self.num_paths,
+        #                                  path_state_dim=self.pe_output_dim))
+        self.layers.append(FlowPointer(num_quests=self.num_quests,
+                                       num_paths=self.num_paths,
+                                       path_state_dim=self.pe_output_dim))
         # self.layers.append(Attention(num_paths=self.pe_output_dim*self.num_paths,
         #                              num_quests=self.num_quests))
         # self.layers.append(Residual(d_model=self.pe_output_dim * self.num_paths,
         #                             num_heads=self.num_paths,
         #                             num_mh=self.att_layers_num))
-        for l in range(self.att_layers_num):
-            # self.layers.append(MultiHeadAttention(d_model=self.pe_output_dim * self.num_paths,
-            #                                       num_heads=self.num_paths))
-            self.layers.append(tf.keras.layers.Dense(self.pe_output_dim * self.num_paths))
-
-        self.layers.append(tf.keras.layers.Dense(self.num_paths))
+        # for l in range(self.att_layers_num):
+        #     # self.layers.append(MultiHeadAttention(d_model=self.pe_output_dim * self.num_paths,
+        #     #                                       num_heads=self.num_paths))
+        #     self.layers.append(tf.keras.layers.Dense(self.pe_output_dim * self.num_paths))
+        # #
+        # self.layers.append(tf.keras.layers.Dense(self.num_paths))
         # self.layers.append(Readout(input_dim=self.pe_output_dim*self.num_paths,
         #                            output_dim=self.num_paths))
 
@@ -188,3 +193,17 @@ class PEM(Model):
         save_path = path + "/model/%s.ckpt" % self.name
         saver.restore(sess, save_path)
         print("Model restored from file: %s" % save_path)
+
+
+class DNN(Model):
+    def __init__(self,**kwargs):
+        super(DNN).__init__(**kwargs)
+
+    def _build(self):
+        self.layers.append(tf.keras.layers.Dense())
+
+    def _loss(self):
+        pass
+
+    def predict(self):
+        pass
